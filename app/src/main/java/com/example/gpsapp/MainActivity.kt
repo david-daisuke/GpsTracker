@@ -104,7 +104,7 @@ class MainActivity : AppCompatActivity() {
                 gpxBuilder.append("        <time>${timeString}</time>\n")
                 gpxBuilder.append("      </trkpt>\n")
             }
-
+//commit 前のコメント
             gpxBuilder.append("    </trkseg>\n  </trk>\n</gpx>")
 
             // 2. 保存するファイルの名前を現在時刻で作る（例: Track_20260326_1412.zip）
