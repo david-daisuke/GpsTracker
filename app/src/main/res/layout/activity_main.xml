@@ -103,7 +103,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
         android:layout_marginTop="16dp"
-        android:text="直近10分間のログ"
+        android:text="直近20分間のログ"
         android:textColor="#455A64"
         android:textSize="14sp"
         android:textStyle="bold"
@@ -133,4 +133,4 @@
             android:textSize="14sp" />
     </ScrollView>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>.widget.ConstraintLayout>
