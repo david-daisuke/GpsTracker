@@ -41,10 +41,10 @@ import java.util.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-// ★ 変更: マークしたデータにも「住所(address)」を保存できるように追加
 data class WaypointData(
     val latitude: Double,
     val longitude: Double,
+    val altitude: Double, // ★ 追加: 標高
     val time: Long,
     val name: String,
     val memo: String,
@@ -54,6 +54,8 @@ data class WaypointData(
 data class TrackLocation(
     val latitude: Double,
     val longitude: Double,
+    val altitude: Double, // ★ 追加: 標高 (m)
+    val speed: Float,     // ★ 追加: 速度 (m/s)
     val time: Long,
     var address: String = ""
 )
@@ -68,6 +70,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var tvRecentLocations: TextView
     private lateinit var tvStatus: TextView
+    private lateinit var tvSpeed: TextView    // ★ 追加
+    private lateinit var tvAltitude: TextView // ★ 追加
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,6 +83,8 @@ class MainActivity : AppCompatActivity() {
         val btnOpenFolder = findViewById<Button>(R.id.btnOpenFolder)
         tvRecentLocations = findViewById(R.id.tvRecentLocations)
         tvStatus = findViewById(R.id.tvStatus)
+        tvSpeed = findViewById(R.id.tvSpeed)       // ★ 追加
+        tvAltitude = findViewById(R.id.tvAltitude) // ★ 追加
 
         if (GpsDataRepository.isRecording) {
             tvStatus.text = "⏺ 記録中"
@@ -93,13 +99,28 @@ class MainActivity : AppCompatActivity() {
         btnOpenFolder.setOnClickListener { openSavedFolder() }
         btnMark.setOnClickListener { showMarkDialog() }
 
+        // ★ 変更: GPSの取得間隔(5秒)に合わせて、画面の更新頻度も5秒ごとに変更
         lifecycleScope.launch {
             while (isActive) {
                 if (GpsDataRepository.isRecording) {
+                    updateRealtimeDisplay() // ★ 追加: 速度と高度の更新
                     updateRecentLocationsDisplay()
                 }
-                delay(60000)
+                delay(5000)
             }
+        }
+    }
+
+    // ★ 追加: リアルタイムの速度と高度を画面にセットする関数
+    private fun updateRealtimeDisplay() {
+        if (GpsDataRepository.locationList.isNotEmpty()) {
+            val lastLoc = GpsDataRepository.locationList.last()
+
+            // GPSから取得した速度は「秒速(m/s)」なので、3.6を掛けて「時速(km/h)」に変換
+            val speedKmH = lastLoc.speed * 3.6
+
+            tvSpeed.text = String.format(Locale.US, "%.1f km/h", speedKmH)
+            tvAltitude.text = String.format(Locale.US, "高度: %.1f m", lastLoc.altitude)
         }
     }
 
@@ -129,8 +150,9 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("保存") { _, _ ->
                 val name = etName.text.toString()
                 val memo = etMemo.text.toString()
-                // ★ 変更: マークする時に、直近で取得できている「住所」も一緒に保存する
-                val wpt = WaypointData(lastLocation.latitude, lastLocation.longitude, System.currentTimeMillis(), name, memo, lastLocation.address)
+
+                // ★ 変更: マークした場所の「高度」も一緒に保存
+                val wpt = WaypointData(lastLocation.latitude, lastLocation.longitude, lastLocation.altitude, System.currentTimeMillis(), name, memo, lastLocation.address)
                 GpsDataRepository.waypointList.add(wpt)
                 Toast.makeText(this, "スポットを記録しました！", Toast.LENGTH_SHORT).show()
 
@@ -161,6 +183,10 @@ class MainActivity : AppCompatActivity() {
         tvStatus.text = "⏺ 記録中"
         tvStatus.setTextColor("#F44336".toColorInt())
 
+        // スタート時にメーターをリセット
+        tvSpeed.text = "0.0 km/h"
+        tvAltitude.text = "高度: 0.0 m"
+
         val serviceIntent = Intent(this, GpsTrackerService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
@@ -181,6 +207,8 @@ class MainActivity : AppCompatActivity() {
 
         tvStatus.text = "⏹ 待機中"
         tvStatus.setTextColor("#78909C".toColorInt())
+        tvSpeed.text = "0.0 km/h"
+        tvAltitude.text = "高度: 0.0 m"
 
         if (GpsDataRepository.locationList.isNotEmpty()) {
             saveToGpxAndZip()
@@ -207,7 +235,6 @@ class MainActivity : AppCompatActivity() {
                 val addrStr = if (wpt.address.isNotEmpty()) " [${wpt.address}]" else ""
                 val latStr = String.format(Locale.US, "%.4f", wpt.latitude)
                 val lonStr = String.format(Locale.US, "%.4f", wpt.longitude)
-                // ★ 変更: マークの表示に、緯度経度と住所を追加して2行で綺麗に見せる
                 Pair(wpt.time, "⭐ [マーク] $displayName$displayMemo\n    📍 緯度: $latStr, 経度: $lonStr$addrStr")
             }
 
@@ -250,6 +277,7 @@ class MainActivity : AppCompatActivity() {
                 val safeMemo = wpt.memo.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
 
                 gpxBuilder.append("  <wpt lat=\"${wpt.latitude}\" lon=\"${wpt.longitude}\">\n")
+                gpxBuilder.append("    <ele>${wpt.altitude}</ele>\n") // ★ 標高データを書き込み
                 gpxBuilder.append("    <time>${timeString}</time>\n")
                 if (safeName.isNotEmpty()) gpxBuilder.append("    <name>${safeName}</name>\n")
                 if (safeMemo.isNotEmpty()) gpxBuilder.append("    <desc>${safeMemo}</desc>\n")
@@ -260,6 +288,7 @@ class MainActivity : AppCompatActivity() {
             for (loc in GpsDataRepository.locationList) {
                 val timeString = sdf.format(Date(loc.time))
                 gpxBuilder.append("      <trkpt lat=\"${loc.latitude}\" lon=\"${loc.longitude}\">\n")
+                gpxBuilder.append("        <ele>${loc.altitude}</ele>\n") // ★ 標高データを書き込み
                 gpxBuilder.append("        <time>${timeString}</time>\n")
                 gpxBuilder.append("      </trkpt>\n")
             }
@@ -307,7 +336,14 @@ class GpsTrackerService : Service() {
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 for (location in locationResult.locations) {
-                    val trackLoc = TrackLocation(location.latitude, location.longitude, location.time)
+                    // ★ 変更: GPSデータから高度と速度も取得して箱に詰める
+                    val trackLoc = TrackLocation(
+                        location.latitude,
+                        location.longitude,
+                        location.altitude, // 高度(m)
+                        location.speed,    // 速度(m/s)
+                        location.time
+                    )
                     GpsDataRepository.locationList.add(trackLoc)
                     Log.d("GPS_TRACKER", "Service記録中... 緯度: ${location.latitude}")
 
@@ -350,8 +386,9 @@ class GpsTrackerService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun requestLocationUpdates() {
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 60000)
-            .setMinUpdateIntervalMillis(60000)
+        // ★ 変更: サイクルコンピューターとしてリアルタイム性を上げるため「5秒(5000ミリ秒)」間隔で取得
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
+            .setMinUpdateIntervalMillis(5000)
             .build()
 
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
