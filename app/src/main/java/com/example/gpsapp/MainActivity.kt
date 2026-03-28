@@ -143,7 +143,7 @@ class MainActivity : AppCompatActivity() {
         GpsDataRepository.waypointList.clear()
         GpsDataRepository.isRecording = true
 
-        tvStatus.text = "⏺ 録画中"
+        tvStatus.text = "⏺ 記録中"
         tvStatus.setTextColor("#F44336".toColorInt())
 
         val serviceIntent = Intent(this, GpsTrackerService::class.java)
@@ -183,7 +183,6 @@ class MainActivity : AppCompatActivity() {
 
         recentLocations.reversed().forEach { loc ->
             val timeStr = sdf.format(Date(loc.time))
-            // Locale.US を適用して警告を解消
             displayText.append("$timeStr - 緯度: ${String.format(Locale.US, "%.4f", loc.latitude)}, 経度: ${String.format(Locale.US, "%.4f", loc.longitude)}\n")
         }
 
@@ -196,7 +195,6 @@ class MainActivity : AppCompatActivity() {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         } catch (e: Exception) {
-            // e.printStackTrace() を追加して警告を解消
             e.printStackTrace()
             Toast.makeText(this, "標準のファイルアプリが開けませんでした", Toast.LENGTH_LONG).show()
         }
@@ -310,3 +308,20 @@ class GpsTrackerService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "GPS Tracking Channel",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager?.createNotificationChannel(channel)
+        }
+    }
+}
