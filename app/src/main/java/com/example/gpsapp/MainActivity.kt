@@ -10,6 +10,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.location.Geocoder
 import android.location.Location
 import android.os.Build
 import android.os.Bundle
@@ -28,6 +29,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -46,8 +49,16 @@ data class WaypointData(
     val memo: String
 )
 
+// ★ 変更: GPS座標と一緒に「推測した住所文字列」を保存するためのデータクラスを新設
+data class TrackLocation(
+    val latitude: Double,
+    val longitude: Double,
+    val time: Long,
+    var address: String = "" // 住所が入る箱（最初は空っぽ）
+)
+
 object GpsDataRepository {
-    val locationList = mutableListOf<Location>()
+    val locationList = mutableListOf<TrackLocation>() // ★ 変更: 新しいデータクラスのリストに
     val waypointList = mutableListOf<WaypointData>()
     var isRecording = false
 }
@@ -69,7 +80,7 @@ class MainActivity : AppCompatActivity() {
         tvStatus = findViewById(R.id.tvStatus)
 
         if (GpsDataRepository.isRecording) {
-            tvStatus.text = "⏺ 記録中" // 変更: 録画中 -> 記録中
+            tvStatus.text = "⏺ 記録中"
             tvStatus.setTextColor("#F44336".toColorInt())
         } else {
             tvStatus.text = "⏹ 待機中"
@@ -145,7 +156,7 @@ class MainActivity : AppCompatActivity() {
         GpsDataRepository.waypointList.clear()
         GpsDataRepository.isRecording = true
 
-        tvStatus.text = "⏺ 記録中" // 変更: 録画中 -> 記録中
+        tvStatus.text = "⏺ 記録中"
         tvStatus.setTextColor("#F44336".toColorInt())
 
         val serviceIntent = Intent(this, GpsTrackerService::class.java)
@@ -177,13 +188,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateRecentLocationsDisplay() {
-        // 変更: 10分 -> 20分 (20 * 60 * 1000)
         val twentyMinutesAgo = System.currentTimeMillis() - (20 * 60 * 1000)
 
         val recentLocations = GpsDataRepository.locationList
             .filter { it.time >= twentyMinutesAgo }
             .map { loc ->
-                Pair(loc.time, "📍 緯度: ${String.format(Locale.US, "%.4f", loc.latitude)}, 経度: ${String.format(Locale.US, "%.4f", loc.longitude)}")
+                // ★ 変更: 住所データがあれば、一緒に画面に表示する
+                val addrStr = if (loc.address.isNotEmpty()) " [${loc.address}]" else ""
+                Pair(loc.time, "📍 緯度: ${String.format(Locale.US, "%.4f", loc.latitude)}, 経度: ${String.format(Locale.US, "%.4f", loc.longitude)}$addrStr")
             }
 
         val recentWaypoints = GpsDataRepository.waypointList
@@ -196,7 +208,6 @@ class MainActivity : AppCompatActivity() {
 
         val combinedList = (recentLocations + recentWaypoints).sortedByDescending { it.first }
 
-        // 変更: テキストを「20分間」に変更
         val displayText = java.lang.StringBuilder("【過去20分間の記録: ${combinedList.size}件】\n")
         val sdf = SimpleDateFormat("HH:mm:ss", Locale.US)
 
@@ -291,8 +302,28 @@ class GpsTrackerService : Service() {
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 for (location in locationResult.locations) {
-                    GpsDataRepository.locationList.add(location)
+                    // ★ 変更: 取得した生データを TrackLocation という箱に詰める
+                    val trackLoc = TrackLocation(location.latitude, location.longitude, location.time)
+                    GpsDataRepository.locationList.add(trackLoc)
                     Log.d("GPS_TRACKER", "Service記録中... 緯度: ${location.latitude}")
+
+                    // ★ 追加: 裏側のネットワーク処理で、緯度経度から「住所（地名）」を推測する
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            val geocoder = Geocoder(applicationContext, Locale.getDefault())
+                            @Suppress("DEPRECATION")
+                            val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+
+                            if (!addresses.isNullOrEmpty()) {
+                                val addr = addresses[0]
+                                // 都道府県(州) + 市区町村 を繋げて見やすい文字列にする (例: 東京都品川区)
+                                trackLoc.address = listOfNotNull(addr.adminArea, addr.locality, addr.subLocality).joinToString("")
+                            }
+                        } catch (e: Exception) {
+                            // 電波がない場合はエラーを出さずに無視する（緯度経度だけ表示される）
+                            e.printStackTrace()
+                        }
+                    }
                 }
             }
         }
