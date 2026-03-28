@@ -126,7 +126,8 @@ class MainActivity : AppCompatActivity() {
 
         recentLocations.reversed().forEach { loc ->
             val timeStr = sdf.format(Date(loc.time))
-            displayText.append("$timeStr - 緯度: ${String.format("%.4f", loc.latitude)}, 経度: ${String.format("%.4f", loc.longitude)}\n")
+            // ★ 修正箇所1: Locale.US を追加して警告を解消しました
+            displayText.append("$timeStr - 緯度: ${String.format(Locale.US, "%.4f", loc.latitude)}, 経度: ${String.format(Locale.US, "%.4f", loc.longitude)}\n")
         }
 
         tvRecentLocations.text = if (recentLocations.isEmpty()) "過去10分間の記録はまだありません" else displayText.toString()
@@ -139,6 +140,8 @@ class MainActivity : AppCompatActivity() {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         } catch (e: Exception) {
+            // ★ 修正箇所2: e.printStackTrace() を追加して警告を解消しました
+            e.printStackTrace()
             Toast.makeText(this, "標準のファイルアプリが開けませんでした", Toast.LENGTH_LONG).show()
         }
     }
@@ -166,11 +169,10 @@ class MainActivity : AppCompatActivity() {
             val zipFileName = "Track_${fileNameTime}.zip"
             val gpxFileName = "Track_${fileNameTime}.gpx"
 
-            // 保存先をパブリックな「ダウンロード」内の「GpsTracker」に変更
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             val directory = File(downloadsDir, "GpsTracker")
             if (!directory.exists()) {
-                directory.mkdirs() // フォルダが存在しない場合は作成
+                directory.mkdirs()
             }
             val zipFile = File(directory, zipFileName)
 
