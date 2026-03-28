@@ -120,6 +120,9 @@ class MainActivity : AppCompatActivity() {
                 val wpt = WaypointData(lastLocation.latitude, lastLocation.longitude, System.currentTimeMillis(), name, memo)
                 GpsDataRepository.waypointList.add(wpt)
                 Toast.makeText(this, "スポットを記録しました！", Toast.LENGTH_SHORT).show()
+
+                // ★ 追加: 保存したら即座に画面のログを更新して反映させる
+                updateRecentLocationsDisplay()
             }
             .setNegativeButton("キャンセル", null)
             .show()
@@ -143,7 +146,7 @@ class MainActivity : AppCompatActivity() {
         GpsDataRepository.waypointList.clear()
         GpsDataRepository.isRecording = true
 
-        tvStatus.text = "⏺ 記録中"
+        tvStatus.text = "⏺ 録画中"
         tvStatus.setTextColor("#F44336".toColorInt())
 
         val serviceIntent = Intent(this, GpsTrackerService::class.java)
@@ -174,19 +177,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ★ 大幅アップデート: 軌跡とマークの両方を画面に表示する処理
     private fun updateRecentLocationsDisplay() {
         val tenMinutesAgo = System.currentTimeMillis() - (10 * 60 * 1000)
-        val recentLocations = GpsDataRepository.locationList.filter { it.time >= tenMinutesAgo }
 
-        val displayText = java.lang.StringBuilder("【過去10分間の記録: ${recentLocations.size}件】\n")
+        // 1. 10分以内の「普通のGPS軌跡」を抽出
+        val recentLocations = GpsDataRepository.locationList
+            .filter { it.time >= tenMinutesAgo }
+            .map { loc ->
+                Pair(loc.time, "📍 緯度: ${String.format(Locale.US, "%.4f", loc.latitude)}, 経度: ${String.format(Locale.US, "%.4f", loc.longitude)}")
+            }
+
+        // 2. 10分以内の「マークしたスポット」を抽出
+        val recentWaypoints = GpsDataRepository.waypointList
+            .filter { it.time >= tenMinutesAgo }
+            .map { wpt ->
+                // 表示を見やすくするために、名称とメモを整形
+                val displayName = if (wpt.name.isNotEmpty()) wpt.name else "名称なし"
+                val displayMemo = if (wpt.memo.isNotEmpty()) " - ${wpt.memo}" else ""
+                Pair(wpt.time, "⭐ [マーク] $displayName$displayMemo")
+            }
+
+        // 3. 軌跡とスポットを合体させて、時間で降順（新しい順）に並べ替える
+        val combinedList = (recentLocations + recentWaypoints).sortedByDescending { it.first }
+
+        val displayText = java.lang.StringBuilder("【過去10分間の記録: ${combinedList.size}件】\n")
         val sdf = SimpleDateFormat("HH:mm:ss", Locale.US)
 
-        recentLocations.reversed().forEach { loc ->
-            val timeStr = sdf.format(Date(loc.time))
-            displayText.append("$timeStr - 緯度: ${String.format(Locale.US, "%.4f", loc.latitude)}, 経度: ${String.format(Locale.US, "%.4f", loc.longitude)}\n")
+        // 4. 画面に表示するテキストを組み立てる
+        combinedList.forEach { item ->
+            val timeStr = sdf.format(Date(item.first))
+            displayText.append("$timeStr ${item.second}\n")
         }
 
-        tvRecentLocations.text = if (recentLocations.isEmpty()) "過去10分間の記録はまだありません" else displayText.toString()
+        tvRecentLocations.text = if (combinedList.isEmpty()) "過去10分間の記録はまだありません" else displayText.toString()
     }
 
     private fun openSavedFolder() {
