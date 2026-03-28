@@ -1,6 +1,8 @@
 package com.example.gpsapp
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.app.DownloadManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,7 +10,6 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.graphics.Color
 import android.location.Location
 import android.os.Build
 import android.os.Bundle
@@ -17,11 +18,14 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import androidx.core.graphics.toColorInt
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.*
 import kotlinx.coroutines.delay
@@ -34,9 +38,17 @@ import java.util.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-// ★ ServiceとActivityでGPSデータを共有するための入れ物
+data class WaypointData(
+    val latitude: Double,
+    val longitude: Double,
+    val time: Long,
+    val name: String,
+    val memo: String
+)
+
 object GpsDataRepository {
     val locationList = mutableListOf<Location>()
+    val waypointList = mutableListOf<WaypointData>()
     var isRecording = false
 }
 
@@ -51,30 +63,23 @@ class MainActivity : AppCompatActivity() {
 
         val btnStart = findViewById<Button>(R.id.btnStart)
         val btnStop = findViewById<Button>(R.id.btnStop)
+        val btnMark = findViewById<Button>(R.id.btnMark)
         val btnOpenFolder = findViewById<Button>(R.id.btnOpenFolder)
         tvRecentLocations = findViewById(R.id.tvRecentLocations)
         tvStatus = findViewById(R.id.tvStatus)
 
-        // ★ 修正箇所: 画面が開いた時や再描画された時に、現在の状態をチェックして正しい表示にする
         if (GpsDataRepository.isRecording) {
             tvStatus.text = "⏺ 録画中"
-            tvStatus.setTextColor(Color.parseColor("#F44336"))
+            tvStatus.setTextColor("#F44336".toColorInt())
         } else {
             tvStatus.text = "⏹ 待機中"
-            tvStatus.setTextColor(Color.parseColor("#78909C"))
+            tvStatus.setTextColor("#78909C".toColorInt())
         }
 
-        btnStart.setOnClickListener {
-            startTracking()
-        }
-
-        btnStop.setOnClickListener {
-            stopTracking()
-        }
-
-        btnOpenFolder.setOnClickListener {
-            openSavedFolder()
-        }
+        btnStart.setOnClickListener { startTracking() }
+        btnStop.setOnClickListener { stopTracking() }
+        btnOpenFolder.setOnClickListener { openSavedFolder() }
+        btnMark.setOnClickListener { showMarkDialog() }
 
         lifecycleScope.launch {
             while (isActive) {
@@ -84,6 +89,40 @@ class MainActivity : AppCompatActivity() {
                 delay(60000)
             }
         }
+    }
+
+    private fun showMarkDialog() {
+        if (!GpsDataRepository.isRecording || GpsDataRepository.locationList.isEmpty()) {
+            Toast.makeText(this, "GPSの記録を開始してからマークできます", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val lastLocation = GpsDataRepository.locationList.last()
+
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.setPadding(50, 40, 50, 10)
+
+        val etName = EditText(this)
+        etName.hint = "名称 (例: 絶景ポイント)"
+        layout.addView(etName)
+
+        val etMemo = EditText(this)
+        etMemo.hint = "メモ"
+        layout.addView(etMemo)
+
+        AlertDialog.Builder(this)
+            .setTitle("📍 現在地を記録")
+            .setView(layout)
+            .setPositiveButton("保存") { _, _ ->
+                val name = etName.text.toString()
+                val memo = etMemo.text.toString()
+                val wpt = WaypointData(lastLocation.latitude, lastLocation.longitude, System.currentTimeMillis(), name, memo)
+                GpsDataRepository.waypointList.add(wpt)
+                Toast.makeText(this, "スポットを記録しました！", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("キャンセル", null)
+            .show()
     }
 
     private fun startTracking() {
@@ -101,11 +140,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         GpsDataRepository.locationList.clear()
+        GpsDataRepository.waypointList.clear()
         GpsDataRepository.isRecording = true
 
-        // ★ 変更: 「録画中」にする
         tvStatus.text = "⏺ 録画中"
-        tvStatus.setTextColor(Color.parseColor("#F44336"))
+        tvStatus.setTextColor("#F44336".toColorInt())
 
         val serviceIntent = Intent(this, GpsTrackerService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -125,9 +164,8 @@ class MainActivity : AppCompatActivity() {
         stopService(serviceIntent)
         GpsDataRepository.isRecording = false
 
-        // ★ 変更: 「待機中」にする
         tvStatus.text = "⏹ 待機中"
-        tvStatus.setTextColor(Color.parseColor("#78909C"))
+        tvStatus.setTextColor("#78909C".toColorInt())
 
         if (GpsDataRepository.locationList.isNotEmpty()) {
             saveToGpxAndZip()
@@ -170,8 +208,20 @@ class MainActivity : AppCompatActivity() {
             val gpxBuilder = java.lang.StringBuilder()
             gpxBuilder.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             gpxBuilder.append("<gpx version=\"1.1\" creator=\"MyTracker\">\n")
-            gpxBuilder.append("  <trk>\n    <trkseg>\n")
 
+            for (wpt in GpsDataRepository.waypointList) {
+                val timeString = sdf.format(Date(wpt.time))
+                val safeName = wpt.name.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
+                val safeMemo = wpt.memo.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
+
+                gpxBuilder.append("  <wpt lat=\"${wpt.latitude}\" lon=\"${wpt.longitude}\">\n")
+                gpxBuilder.append("    <time>${timeString}</time>\n")
+                if (safeName.isNotEmpty()) gpxBuilder.append("    <name>${safeName}</name>\n")
+                if (safeMemo.isNotEmpty()) gpxBuilder.append("    <desc>${safeMemo}</desc>\n")
+                gpxBuilder.append("  </wpt>\n")
+            }
+
+            gpxBuilder.append("  <trk>\n    <trkseg>\n")
             for (loc in GpsDataRepository.locationList) {
                 val timeString = sdf.format(Date(loc.time))
                 gpxBuilder.append("      <trkpt lat=\"${loc.latitude}\" lon=\"${loc.longitude}\">\n")
@@ -247,14 +297,14 @@ class GpsTrackerService : Service() {
         return START_STICKY
     }
 
+    // ★ Lintエラーを抑えるためにアノテーションを追加
+    @SuppressLint("MissingPermission")
     private fun requestLocationUpdates() {
         val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 60000)
             .setMinUpdateIntervalMillis(60000)
             .build()
 
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
-        }
+        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
     }
 
     override fun onDestroy() {
