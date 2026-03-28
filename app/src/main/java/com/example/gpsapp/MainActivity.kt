@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.graphics.Color
 import android.location.Location
 import android.os.Build
 import android.os.Bundle
@@ -42,6 +43,7 @@ object GpsDataRepository {
 class MainActivity : AppCompatActivity() {
 
     private lateinit var tvRecentLocations: TextView
+    private lateinit var tvStatus: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,6 +53,16 @@ class MainActivity : AppCompatActivity() {
         val btnStop = findViewById<Button>(R.id.btnStop)
         val btnOpenFolder = findViewById<Button>(R.id.btnOpenFolder)
         tvRecentLocations = findViewById(R.id.tvRecentLocations)
+        tvStatus = findViewById(R.id.tvStatus)
+
+        // ★ 修正箇所: 画面が開いた時や再描画された時に、現在の状態をチェックして正しい表示にする
+        if (GpsDataRepository.isRecording) {
+            tvStatus.text = "⏺ 録画中"
+            tvStatus.setTextColor(Color.parseColor("#F44336"))
+        } else {
+            tvStatus.text = "⏹ 待機中"
+            tvStatus.setTextColor(Color.parseColor("#78909C"))
+        }
 
         btnStart.setOnClickListener {
             startTracking()
@@ -64,13 +76,12 @@ class MainActivity : AppCompatActivity() {
             openSavedFolder()
         }
 
-        // ★ 1分ごとに画面を更新するループ処理 (コルーチン)
         lifecycleScope.launch {
             while (isActive) {
                 if (GpsDataRepository.isRecording) {
                     updateRecentLocationsDisplay()
                 }
-                delay(60000) // 1分 (60000ミリ秒) 待機して繰り返す
+                delay(60000)
             }
         }
     }
@@ -92,6 +103,10 @@ class MainActivity : AppCompatActivity() {
         GpsDataRepository.locationList.clear()
         GpsDataRepository.isRecording = true
 
+        // ★ 変更: 「録画中」にする
+        tvStatus.text = "⏺ 録画中"
+        tvStatus.setTextColor(Color.parseColor("#F44336"))
+
         val serviceIntent = Intent(this, GpsTrackerService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
@@ -110,6 +125,10 @@ class MainActivity : AppCompatActivity() {
         stopService(serviceIntent)
         GpsDataRepository.isRecording = false
 
+        // ★ 変更: 「待機中」にする
+        tvStatus.text = "⏹ 待機中"
+        tvStatus.setTextColor(Color.parseColor("#78909C"))
+
         if (GpsDataRepository.locationList.isNotEmpty()) {
             saveToGpxAndZip()
         } else {
@@ -126,27 +145,23 @@ class MainActivity : AppCompatActivity() {
 
         recentLocations.reversed().forEach { loc ->
             val timeStr = sdf.format(Date(loc.time))
-            // ★ 修正箇所1: Locale.US を追加して警告を解消しました
             displayText.append("$timeStr - 緯度: ${String.format(Locale.US, "%.4f", loc.latitude)}, 経度: ${String.format(Locale.US, "%.4f", loc.longitude)}\n")
         }
 
         tvRecentLocations.text = if (recentLocations.isEmpty()) "過去10分間の記録はまだありません" else displayText.toString()
     }
 
-    // ★ Android標準の「ダウンロード」フォルダを開く処理
     private fun openSavedFolder() {
         try {
             val intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         } catch (e: Exception) {
-            // ★ 修正箇所2: e.printStackTrace() を追加して警告を解消しました
             e.printStackTrace()
             Toast.makeText(this, "標準のファイルアプリが開けませんでした", Toast.LENGTH_LONG).show()
         }
     }
 
-    // ★ GPXを作ってZIPに圧縮し、ダウンロードフォルダに保存する処理
     private fun saveToGpxAndZip() {
         try {
             val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
@@ -194,7 +209,6 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-// ★ バックグラウンドで動き続けるための「フォアグラウンドサービス」
 class GpsTrackerService : Service() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
