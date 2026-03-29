@@ -9,6 +9,7 @@
     android:background="#F0F4F8"
     android:fitsSystemWindows="true"
     tools:context=".MainActivity">
+
     <LinearLayout
         android:id="@+id/headerLayout"
         android:layout_width="match_parent"
@@ -27,7 +28,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="GPS LOGGER"
+            android:text="@string/app_name"
             android:textColor="#FFFFFF"
             android:textSize="22sp"
             android:textStyle="bold" />
@@ -122,7 +123,7 @@
         android:layout_height="60dp"
         android:layout_margin="24dp"
         android:backgroundTint="#FF9800"
-        android:text="📍 現在地を記録 (MARK)"
+        android:text="📍 スポットを記録"
         android:textColor="#FFFFFF"
         android:textSize="18sp"
         android:textStyle="bold"
@@ -130,19 +131,40 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/btnStart" />
 
-    <Button
-        android:id="@+id/btnOpenFolder"
-        android:layout_width="0dp"
+    <LinearLayout
+        android:id="@+id/layoutFolders"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="24dp"
-        android:backgroundTint="#03A9F4"
-        android:padding="12dp"
-        android:text="📁 保存先フォルダを開く"
-        android:textColor="#FFFFFF"
-        android:textStyle="bold"
-        app:layout_constraintEnd_toEndOf="parent"
+        android:orientation="horizontal"
+        app:layout_constraintTop_toBottomOf="@+id/btnMark"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/btnMark" />
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <Button
+            android:id="@+id/btnOpenFolder"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:backgroundTint="#03A9F4"
+            android:padding="12dp"
+            android:text="GPXフォルダ"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnOpenLogFolder"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:backgroundTint="#607D8B"
+            android:padding="12dp"
+            android:text="ログフォルダ"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/tvLogTitle"
@@ -150,12 +172,12 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
         android:layout_marginTop="16dp"
-        android:text="直近20分間のログ"
+        android:text="リアルタイムログ (過去20分)"
         android:textColor="#455A64"
         android:textSize="14sp"
         android:textStyle="bold"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/btnOpenFolder" />
+        app:layout_constraintTop_toBottomOf="@+id/layoutFolders" />
 
     <ScrollView
         android:layout_width="0dp"
@@ -175,8 +197,9 @@
             android:layout_height="wrap_content"
             android:fontFamily="monospace"
             android:lineSpacingExtra="4dp"
-            android:text="待機中...\nSTARTを押すと記録が始まります。"
+            android:text="ログはまだありません"
             android:textColor="#37474F"
-            android:textSize="12sp" /> </ScrollView>
+            android:textSize="12sp" />
+    </ScrollView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
