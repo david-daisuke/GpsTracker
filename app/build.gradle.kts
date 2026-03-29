@@ -4,16 +4,13 @@ plugins {
 
 android {
     namespace = "com.example.gpsapp"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    // ★ 安定版の最新バージョン(35)にスッキリ統一しました
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.gpsapp"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 35 // ★ ここも35に統一
         versionCode = 1
         versionName = "1.0"
 
@@ -44,9 +41,11 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+
+    // 位置情報
     implementation("com.google.android.gms:play-services-location:21.2.0")
-    // ★ 追加: 完全無料の地図ライブラリ (osmdroid)
+    // ★ 完全無料の地図ライブラリ (osmdroid)
     implementation("org.osmdroid:osmdroid-android:6.1.18")
-    // ★ これを追加します（グラフ用ライブラリ）
+    // ★ グラフ用ライブラリ
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
 }

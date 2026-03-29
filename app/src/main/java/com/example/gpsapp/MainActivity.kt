@@ -489,8 +489,18 @@ class GpsTrackerService : Service() {
             override fun onLocationResult(locationResult: LocationResult) {
                 for (location in locationResult.locations) {
 
-                    // パケットペイロードのような形でローデータを受信時に記録
-                    DebugLogger.log(this@GpsTrackerService, "GpsTrackerService", "Location received -> Lat: ${location.latitude}, Lon: ${location.longitude}, Acc: ${location.accuracy}m, Spd: ${location.speed}m/s")
+                    // ★ 1. 高度の補正処理 (ジオイド高の補正)
+                    var realAltitude = location.altitude
+                    if (Build.VERSION.SDK_INT >= 34 && location.hasMslAltitude()) {
+                        // Android 14以降の機能で正確な海抜(MSL)を取得
+                        realAltitude = location.mslAltitudeMeters
+                    } else {
+                        // 未対応の場合は東京周辺のジオイド高(約36m)を簡易的に引く
+                        realAltitude -= 36.0
+                    }
+
+                    // ログ出力 (生の高度と補正後の高度を比較できるように)
+                    DebugLogger.log(this@GpsTrackerService, "GpsTrackerService", "Location received -> Lat: ${location.latitude}, Lon: ${location.longitude}, RawAlt: ${location.altitude}m, RealAlt: ${realAltitude}m")
 
                     val lastSavedLoc = GpsDataRepository.locationList.lastOrNull()
                     if (lastSavedLoc != null) {
@@ -500,10 +510,12 @@ class GpsTrackerService : Service() {
                         }
                         GpsDataRepository.totalDistance += prevLocation.distanceTo(location)
                     }
+
+                    // ★ 2. 補正した realAltitude を TrackLocation に保存する
                     val trackLoc = TrackLocation(
                         location.latitude,
                         location.longitude,
-                        location.altitude,
+                        realAltitude, // ← ここを location.altitude から変更
                         location.speed,
                         location.time,
                         GpsDataRepository.totalDistance
@@ -520,15 +532,12 @@ class GpsTrackerService : Service() {
                                 trackLoc.address = listOfNotNull(addr.adminArea, addr.locality, addr.subLocality).joinToString("")
                             }
                         } catch (e: Exception) {
-                            // Geocoderはエラーが出やすいため、原因を特定しやすくする
                             DebugLogger.log(this@GpsTrackerService, "GpsTrackerService", "Geocoder error: ${e.message}")
                         }
                     }
                 }
             }
         }
-    }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         DebugLogger.log(this, "GpsTrackerService", "onStartCommand invoked, building foreground notification")
         createNotificationChannel()
