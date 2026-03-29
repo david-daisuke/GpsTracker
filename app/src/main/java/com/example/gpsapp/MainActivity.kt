@@ -123,8 +123,10 @@ class MainActivity : AppCompatActivity() {
         btnStop.setOnClickListener { stopTracking() }
         btnMark.setOnClickListener { showMarkDialog() }
         btnOpenFolder.setOnClickListener { openFolderInFilesApp("GPX") }
-        btnOpenLogFolder.setOnClickListener { openFolderInFilesApp("LOGS") }
-
+// ★ ログフォルダボタンを押したら、履歴画面(HistoryActivity)を開くように変更
+        btnOpenLogFolder.setOnClickListener {
+            startActivity(Intent(this, HistoryActivity::class.java))
+        }
         // 5秒おきに画面を更新
         lifecycleScope.launch {
             while (isActive) {
