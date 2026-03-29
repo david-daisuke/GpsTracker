@@ -69,6 +69,26 @@
                 <RadioButton android:id="@+id/rbAccBalanced" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="バランス (Wi-Fiや基地局も併用)" />
             </RadioGroup>
 
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="開発者向けオプション"
+                android:textColor="#37474F"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp"/>
+
+            <Switch
+                android:id="@+id/switchDebug"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#FFFFFF"
+                android:elevation="2dp"
+                android:padding="12dp"
+                android:text="詳細デバッグログをファイルに保存"
+                android:textColor="#37474F" />
+
         </LinearLayout>
     </ScrollView>
 

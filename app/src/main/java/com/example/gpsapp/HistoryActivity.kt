@@ -22,7 +22,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-// GPXファイルから抽出した情報を保持するデータクラス
 data class GpxFileInfo(
     val file: File,
     val dateStr: String,
@@ -41,6 +40,8 @@ class HistoryActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_history)
 
+        DebugLogger.log(this, "HistoryActivity", "onCreate invoked")
+
         recyclerView = findViewById(R.id.recyclerView)
         tvEmpty = findViewById(R.id.tvEmpty)
 
@@ -52,13 +53,14 @@ class HistoryActivity : AppCompatActivity() {
     }
 
     private fun loadGpxFiles() {
+        DebugLogger.log(this, "HistoryActivity", "loadGpxFiles: Start scanning for GPX files")
+
         lifecycleScope.launch(Dispatchers.IO) {
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             val gpxBaseDir = File(downloadsDir, "GpsTrackerLogs/GPX")
 
             val foundFiles = mutableListOf<File>()
 
-            // YYYYMMDD の日付フォルダを全て検索し、中の .gpx ファイルを集める
             if (gpxBaseDir.exists() && gpxBaseDir.isDirectory) {
                 gpxBaseDir.listFiles()?.forEach { dateFolder ->
                     if (dateFolder.isDirectory) {
@@ -69,13 +71,12 @@ class HistoryActivity : AppCompatActivity() {
                 }
             }
 
-            // 日付が新しい順にソート
             foundFiles.sortByDescending { it.lastModified() }
+            DebugLogger.log(this@HistoryActivity, "HistoryActivity", "Found ${foundFiles.size} GPX files.")
 
             val parsedList = mutableListOf<GpxFileInfo>()
             val sdf = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.US)
 
-            // 各GPXファイルを簡易解析して距離とマーク数を計算
             for (file in foundFiles) {
                 var wpCount = 0
                 var totalDist = 0.0f
@@ -101,6 +102,7 @@ class HistoryActivity : AppCompatActivity() {
                         }
                     }
                 } catch (e: Exception) {
+                    DebugLogger.log(this@HistoryActivity, "HistoryActivity", "Parse error on file ${file.name}: ${e.message}")
                     e.printStackTrace()
                 }
 
@@ -114,37 +116,36 @@ class HistoryActivity : AppCompatActivity() {
                 )
             }
 
-            // 画面の更新はメインスレッドで行う
             withContext(Dispatchers.Main) {
                 gpxList.clear()
                 gpxList.addAll(parsedList)
                 adapter.notifyDataSetChanged()
                 tvEmpty.visibility = if (gpxList.isEmpty()) View.VISIBLE else View.GONE
+                DebugLogger.log(this@HistoryActivity, "HistoryActivity", "UI updated with parsed GPX data")
             }
         }
     }
 
     private fun shareFile(file: File) {
+        DebugLogger.log(this, "HistoryActivity", "shareFile triggered for ${file.name}")
         try {
-            // ★ 修正箇所1: パッケージ名を直接指定して確実にFileProviderを呼び出す
             val uri = FileProvider.getUriForFile(this, "com.example.gpsapp.fileprovider", file)
 
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "*/*" // どんなアプリでも受け取れるようにする
+                type = "*/*"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(Intent.createChooser(shareIntent, "GPXファイルを共有"))
 
         } catch (e: Exception) {
+            DebugLogger.log(this, "HistoryActivity", "Exception during shareFile: ${e.message}")
             e.printStackTrace()
-            // ★ 修正箇所2: 共有に失敗した場合は画面下部にエラーメッセージを表示して原因を分かりやすくする
             Toast.makeText(this, "共有エラー: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 }
 
-// RecyclerView 用のアダプター
 class HistoryAdapter(
     private val items: List<GpxFileInfo>,
     private val onShareClick: (File) -> Unit
@@ -164,10 +165,8 @@ class HistoryAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = items[position]
         holder.tvDate.text = item.dateStr
-
         val distStr = String.format(Locale.US, "%.2f", item.distanceKm)
         holder.tvDetails.text = "走行距離: $distStr km  |  スポット: ${item.waypointCount}ヶ所"
-
         holder.btnShare.setOnClickListener {
             onShareClick(item.file)
         }
