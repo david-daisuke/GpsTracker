@@ -127,21 +127,40 @@
         app:layout_constraintStart_toEndOf="@+id/btnStart"
         app:layout_constraintTop_toBottomOf="@+id/mapView" />
 
-    <Button
-        android:id="@+id/btnMark"
-        android:layout_width="0dp"
-        android:layout_height="50dp"
+    <LinearLayout
+        android:id="@+id/layoutMarkSettings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
         android:layout_marginTop="12dp"
-        android:backgroundTint="#FF9800"
-        android:text="📍 スポットを記録"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/btnStart" />
+        android:orientation="horizontal"
+        app:layout_constraintTop_toBottomOf="@+id/btnStart">
+
+        <Button
+            android:id="@+id/btnMark"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="2"
+            android:layout_marginEnd="4dp"
+            android:backgroundTint="#FF9800"
+            android:text="📍 スポット記録"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnSettings"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:backgroundTint="#607D8B"
+            android:text="⚙️ 設定"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/layoutFolders"

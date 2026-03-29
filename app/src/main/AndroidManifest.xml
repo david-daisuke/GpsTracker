@@ -34,6 +34,7 @@
             android:name=".HistoryActivity"
             android:exported="false"
             android:label="履歴一覧" />
+        <activity android:name=".SettingsActivity" android:label="設定" />
 
         <service
             android:name=".GpsTrackerService"

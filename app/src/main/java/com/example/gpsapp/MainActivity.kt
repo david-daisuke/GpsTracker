@@ -7,6 +7,7 @@ import android.app.DownloadManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
@@ -80,12 +81,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvSpeed: TextView
     private lateinit var tvAltitude: TextView
     private lateinit var tvDistance: TextView
-    private lateinit var mapView: MapView // ★追加: マップビュー
+    private lateinit var mapView: MapView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ★重要: OSMdroidの設定 (パッケージ名を設定しないと地図サーバーからブロックされます)
+        // OSMdroidの設定 (パッケージ名を設定しないと地図サーバーからブロックされます)
         Configuration.getInstance().userAgentValue = applicationContext.packageName
 
         setContentView(R.layout.activity_main)
@@ -102,6 +103,7 @@ class MainActivity : AppCompatActivity() {
         val btnStart = findViewById<Button>(R.id.btnStart)
         val btnStop = findViewById<Button>(R.id.btnStop)
         val btnMark = findViewById<Button>(R.id.btnMark)
+        val btnSettings = findViewById<Button>(R.id.btnSettings) // ★ 追加: 設定ボタン
         val btnOpenFolder = findViewById<Button>(R.id.btnOpenFolder)
         val btnOpenLogFolder = findViewById<Button>(R.id.btnOpenLogFolder)
 
@@ -122,18 +124,24 @@ class MainActivity : AppCompatActivity() {
         btnStart.setOnClickListener { startTracking() }
         btnStop.setOnClickListener { stopTracking() }
         btnMark.setOnClickListener { showMarkDialog() }
+
+        // ★ 追加: 設定画面を開く
+        btnSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
         btnOpenFolder.setOnClickListener { openFolderInFilesApp("GPX") }
-// ★ ログフォルダボタンを押したら、履歴画面(HistoryActivity)を開くように変更
         btnOpenLogFolder.setOnClickListener {
             startActivity(Intent(this, HistoryActivity::class.java))
         }
+
         // 5秒おきに画面を更新
         lifecycleScope.launch {
             while (isActive) {
                 if (GpsDataRepository.isRecording) {
                     updateRealtimeDisplay()
                     updateRecentLocationsDisplay()
-                    updateMapDisplay() // ★ 地図も更新
+                    updateMapDisplay() // 地図も更新
                 }
                 delay(5000)
             }
@@ -150,7 +158,6 @@ class MainActivity : AppCompatActivity() {
         mapView.onPause()
     }
 
-    // ★ 地図上に軌跡とピンを描画する処理
     private fun updateMapDisplay() {
         if (GpsDataRepository.locationList.isEmpty()) return
 
@@ -220,7 +227,7 @@ class MainActivity : AppCompatActivity() {
                 GpsDataRepository.waypointList.add(wpt)
                 Toast.makeText(this, "スポットを記録しました！", Toast.LENGTH_SHORT).show()
                 updateRecentLocationsDisplay()
-                updateMapDisplay() // ★ マップ上にも即座にピンを立てる
+                updateMapDisplay()
             }
             .setNegativeButton("キャンセル", null)
             .show()
@@ -493,9 +500,15 @@ class GpsTrackerService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun requestLocationUpdates() {
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
-            .setMinUpdateIntervalMillis(5000)
+        // ★ 変更: SharedPreferencesからユーザー設定（間隔と精度）を読み込んで適用する
+        val prefs = getSharedPreferences("GpsSettings", Context.MODE_PRIVATE)
+        val intervalMs = prefs.getLong("INTERVAL", 5000L) // デフォルト5秒
+        val accuracy = prefs.getInt("ACCURACY", Priority.PRIORITY_HIGH_ACCURACY)
+
+        val locationRequest = LocationRequest.Builder(accuracy, intervalMs)
+            .setMinUpdateIntervalMillis(intervalMs)
             .build()
+
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
     }
 
