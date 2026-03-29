@@ -54,11 +54,11 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 // ==========================================
-// ★ 共通ロガー機構 (Syslogのような役割)
+// ★ 共通ロガー機構
 // ==========================================
 object DebugLogger {
     fun log(context: Context, tag: String, message: String) {
-        Log.d("GPS_$tag", message) // 常にLogcatには出力する
+        Log.d("GPS_$tag", message)
 
         val prefs = context.getSharedPreferences("GpsSettings", Context.MODE_PRIVATE)
         if (prefs.getBoolean("DEBUG_MODE", false)) {
@@ -73,7 +73,6 @@ object DebugLogger {
                 val file = File(debugDir, fileName)
                 val timestamp = SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.US).format(Date())
 
-                // true を指定して追記モードで書き込む
                 FileOutputStream(file, true).use { fos ->
                     fos.write("[$timestamp] [$tag] $message\n".toByteArray())
                 }
@@ -489,18 +488,15 @@ class GpsTrackerService : Service() {
             override fun onLocationResult(locationResult: LocationResult) {
                 for (location in locationResult.locations) {
 
-                    // ★ 1. 高度の補正処理 (ジオイド高の補正)
+                    // ★ 高度の補正処理 (Android 14以降のMSL、または東京周辺のジオイド高を引く)
                     var realAltitude = location.altitude
                     if (Build.VERSION.SDK_INT >= 34 && location.hasMslAltitude()) {
-                        // Android 14以降の機能で正確な海抜(MSL)を取得
                         realAltitude = location.mslAltitudeMeters
                     } else {
-                        // 未対応の場合は東京周辺のジオイド高(約36m)を簡易的に引く
                         realAltitude -= 36.0
                     }
 
-                    // ログ出力 (生の高度と補正後の高度を比較できるように)
-                    DebugLogger.log(this@GpsTrackerService, "GpsTrackerService", "Location received -> Lat: ${location.latitude}, Lon: ${location.longitude}, RawAlt: ${location.altitude}m, RealAlt: ${realAltitude}m")
+                    DebugLogger.log(this@GpsTrackerService, "GpsTrackerService", "Location received -> Lat: ${location.latitude}, Lon: ${location.longitude}, RawAlt: ${location.altitude}m, RealAlt: ${realAltitude}m, Spd: ${location.speed}m/s")
 
                     val lastSavedLoc = GpsDataRepository.locationList.lastOrNull()
                     if (lastSavedLoc != null) {
@@ -510,12 +506,10 @@ class GpsTrackerService : Service() {
                         }
                         GpsDataRepository.totalDistance += prevLocation.distanceTo(location)
                     }
-
-                    // ★ 2. 補正した realAltitude を TrackLocation に保存する
                     val trackLoc = TrackLocation(
                         location.latitude,
                         location.longitude,
-                        realAltitude, // ← ここを location.altitude から変更
+                        realAltitude, // ★ 補正した高度を保存
                         location.speed,
                         location.time,
                         GpsDataRepository.totalDistance
@@ -538,8 +532,10 @@ class GpsTrackerService : Service() {
                 }
             }
         }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        DebugLogger.log(this, "GpsTrackerService", "onStartCommand invoked, building foreground notification")
+        DebugLogger.log(this, "GpsTrackerService", "onStartCommand invoked")
         createNotificationChannel()
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("GPS Tracker")
@@ -561,7 +557,7 @@ class GpsTrackerService : Service() {
         val intervalMs = prefs.getLong("INTERVAL", 5000L)
         val accuracy = prefs.getInt("ACCURACY", Priority.PRIORITY_HIGH_ACCURACY)
 
-        DebugLogger.log(this, "GpsTrackerService", "Requesting updates -> Interval: ${intervalMs}ms, Accuracy setting: $accuracy")
+        DebugLogger.log(this, "GpsTrackerService", "Requesting updates -> Interval: ${intervalMs}ms, Accuracy: $accuracy")
 
         val locationRequest = LocationRequest.Builder(accuracy, intervalMs)
             .setMinUpdateIntervalMillis(intervalMs)
@@ -571,7 +567,7 @@ class GpsTrackerService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        DebugLogger.log(this, "GpsTrackerService", "onDestroy invoked, removing location updates")
+        DebugLogger.log(this, "GpsTrackerService", "onDestroy invoked")
         fusedLocationClient.removeLocationUpdates(locationCallback)
     }
 
