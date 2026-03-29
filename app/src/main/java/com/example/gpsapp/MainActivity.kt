@@ -35,6 +35,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polyline
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -74,16 +80,30 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvSpeed: TextView
     private lateinit var tvAltitude: TextView
     private lateinit var tvDistance: TextView
+    private lateinit var mapView: MapView // ★追加: マップビュー
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // ★重要: OSMdroidの設定 (パッケージ名を設定しないと地図サーバーからブロックされます)
+        Configuration.getInstance().userAgentValue = applicationContext.packageName
+
         setContentView(R.layout.activity_main)
+
+        // MapViewの初期設定
+        mapView = findViewById(R.id.mapView)
+        mapView.setTileSource(TileSourceFactory.MAPNIK)
+        mapView.setMultiTouchControls(true)
+        mapView.controller.setZoom(18.0)
+
+        // 日本(東京)周辺を初期位置にする
+        mapView.controller.setCenter(GeoPoint(35.6895, 139.6917))
 
         val btnStart = findViewById<Button>(R.id.btnStart)
         val btnStop = findViewById<Button>(R.id.btnStop)
         val btnMark = findViewById<Button>(R.id.btnMark)
         val btnOpenFolder = findViewById<Button>(R.id.btnOpenFolder)
-        val btnOpenLogFolder = findViewById<Button>(R.id.btnOpenLogFolder) // ★追加
+        val btnOpenLogFolder = findViewById<Button>(R.id.btnOpenLogFolder)
 
         tvRecentLocations = findViewById(R.id.tvRecentLocations)
         tvStatus = findViewById(R.id.tvStatus)
@@ -102,20 +122,60 @@ class MainActivity : AppCompatActivity() {
         btnStart.setOnClickListener { startTracking() }
         btnStop.setOnClickListener { stopTracking() }
         btnMark.setOnClickListener { showMarkDialog() }
-
-        // ★ それぞれ対応するフォルダを開く
         btnOpenFolder.setOnClickListener { openFolderInFilesApp("GPX") }
         btnOpenLogFolder.setOnClickListener { openFolderInFilesApp("LOGS") }
 
+        // 5秒おきに画面を更新
         lifecycleScope.launch {
             while (isActive) {
                 if (GpsDataRepository.isRecording) {
                     updateRealtimeDisplay()
                     updateRecentLocationsDisplay()
+                    updateMapDisplay() // ★ 地図も更新
                 }
                 delay(5000)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        mapView.onResume()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        mapView.onPause()
+    }
+
+    // ★ 地図上に軌跡とピンを描画する処理
+    private fun updateMapDisplay() {
+        if (GpsDataRepository.locationList.isEmpty()) return
+
+        mapView.overlays.clear()
+
+        // 軌跡 (青い線) を描画
+        val polyline = Polyline()
+        polyline.color = android.graphics.Color.BLUE
+        polyline.width = 10.0f
+        val geoPoints = GpsDataRepository.locationList.map { GeoPoint(it.latitude, it.longitude) }
+        polyline.setPoints(geoPoints)
+        mapView.overlays.add(polyline)
+
+        // スポット (ピン) を描画
+        GpsDataRepository.waypointList.forEach { wpt ->
+            val marker = Marker(mapView)
+            marker.position = GeoPoint(wpt.latitude, wpt.longitude)
+            marker.title = wpt.name
+            marker.snippet = wpt.memo
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            mapView.overlays.add(marker)
+        }
+
+        // 最新の現在地にカメラを追従させる
+        val lastLoc = GpsDataRepository.locationList.last()
+        mapView.controller.animateTo(GeoPoint(lastLoc.latitude, lastLoc.longitude))
+        mapView.invalidate() // 地図を再描画
     }
 
     private fun updateRealtimeDisplay() {
@@ -158,6 +218,7 @@ class MainActivity : AppCompatActivity() {
                 GpsDataRepository.waypointList.add(wpt)
                 Toast.makeText(this, "スポットを記録しました！", Toast.LENGTH_SHORT).show()
                 updateRecentLocationsDisplay()
+                updateMapDisplay() // ★ マップ上にも即座にピンを立てる
             }
             .setNegativeButton("キャンセル", null)
             .show()
@@ -180,6 +241,7 @@ class MainActivity : AppCompatActivity() {
         GpsDataRepository.waypointList.clear()
         GpsDataRepository.isRecording = true
         GpsDataRepository.totalDistance = 0.0f
+        mapView.overlays.clear()
 
         tvStatus.text = "⏺ 記録中"
         tvStatus.setTextColor("#F44336".toColorInt())
@@ -208,7 +270,7 @@ class MainActivity : AppCompatActivity() {
         tvStatus.setTextColor("#B0BEC5".toColorInt())
 
         if (GpsDataRepository.locationList.isNotEmpty()) {
-            saveToGpxAndLogFile() // ★ ログファイルも一緒に保存する
+            saveToGpxAndLogFile()
         } else {
             Toast.makeText(this, "記録されたデータがありません", Toast.LENGTH_SHORT).show()
         }
@@ -238,7 +300,6 @@ class MainActivity : AppCompatActivity() {
             Pair(wpt.time, "⭐ [マーク] $displayName$displayMemo\n    📍 緯度: $latStr, 経度: $lonStr$addrStr")
         }
 
-        // 画面表示用は「新しい順(Descending)」
         val combinedList = (recentLocations + recentWaypoints).sortedByDescending { it.first }
         val displayText = java.lang.StringBuilder("【過去20分間の記録: ${combinedList.size}件】\n")
         val sdf = SimpleDateFormat("HH:mm:ss", Locale.US)
@@ -251,10 +312,8 @@ class MainActivity : AppCompatActivity() {
         tvRecentLocations.text = if (combinedList.isEmpty()) "過去20分間の記録はまだありません" else displayText.toString().trim()
     }
 
-    // ★ Pixel標準の「Files」アプリで特定のフォルダを直接開く処理
     private fun openFolderInFilesApp(subFolderName: String) {
         val dateDirName = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-        // URLエンコードされたパス: Download/GpsTrackerLogs/GPX(またはLOGS)/YYYYMMDD
         val path = "GpsTrackerLogs%2F$subFolderName%2F$dateDirName"
         val uri = Uri.parse("content://com.android.externalstorage.documents/document/primary:Download%2F$path")
 
@@ -266,7 +325,6 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         } catch (e: Exception) {
             e.printStackTrace()
-            // 失敗した場合はDownloadsフォルダ全体を開く
             try {
                 startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
             } catch (e2: Exception) {
@@ -275,7 +333,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ★ GPXとテキストログ(.txt)を同時に保存する処理
     private fun saveToGpxAndLogFile() {
         try {
             val twentyMinutesAgo = System.currentTimeMillis() - (20 * 60 * 1000)
@@ -287,10 +344,9 @@ class MainActivity : AppCompatActivity() {
                 return
             }
 
-            // --- 1. ファイル名と保存期間の設定 ---
             val sdfUtc = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
             val fileNameTime = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
-            val dateDirName = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date()) // 1日ごとのフォルダ用
+            val dateDirName = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
 
             val gpxFileName = "Track_${fileNameTime}.gpx"
             val txtFileName = "Log_${fileNameTime}.txt"
@@ -299,14 +355,12 @@ class MainActivity : AppCompatActivity() {
             val maxTime = (recentLocations.map { it.time } + recentWaypoints.map { it.time }).maxOrNull() ?: System.currentTimeMillis()
             val timeFormatForLog = SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
 
-            // --- 2. テキストログ(.txt)の作成 ---
             val logBuilder = StringBuilder()
             logBuilder.append("【GPSトラッカー 記録ログ】\n")
             logBuilder.append("保存対象期間: ${timeFormatForLog.format(Date(minTime))} 〜 ${timeFormatForLog.format(Date(maxTime))}\n")
             logBuilder.append("関連GPXファイル名: $gpxFileName\n")
             logBuilder.append("-----------------------------------------\n")
 
-            // ログファイル用は「古い順(Ascending)」に並び替え
             val logLocations = recentLocations.map { loc ->
                 val speedKmH = loc.speed * 3.6
                 val distKm = loc.distance / 1000.0
@@ -323,7 +377,6 @@ class MainActivity : AppCompatActivity() {
                 logBuilder.append("[${sdfTimeOnly.format(Date(item.first))}] ${item.second}\n\n")
             }
 
-            // --- 3. GPXの作成 ---
             val gpxBuilder = java.lang.StringBuilder()
             gpxBuilder.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             gpxBuilder.append("<gpx version=\"1.1\" creator=\"MyTracker\">\n")
@@ -350,15 +403,11 @@ class MainActivity : AppCompatActivity() {
             }
             gpxBuilder.append("    </trkseg>\n  </trk>\n</gpx>")
 
-            // --- 4. フォルダ作成とファイル保存 (1日ごとのフォルダ) ---
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-
-            // GPX保存先: Download/GpsTrackerLogs/GPX/20260329/
             val gpxDir = File(downloadsDir, "GpsTrackerLogs/GPX/$dateDirName")
             if (!gpxDir.exists()) gpxDir.mkdirs()
             FileOutputStream(File(gpxDir, gpxFileName)).use { it.write(gpxBuilder.toString().toByteArray()) }
 
-            // ログ保存先: Download/GpsTrackerLogs/LOGS/20260329/
             val logDir = File(downloadsDir, "GpsTrackerLogs/LOGS/$dateDirName")
             if (!logDir.exists()) logDir.mkdirs()
             FileOutputStream(File(logDir, txtFileName)).use { it.write(logBuilder.toString().toByteArray()) }

@@ -47,7 +47,7 @@
         android:id="@+id/layoutRealtime"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="8dp"
         android:orientation="horizontal"
         android:gravity="center"
         app:layout_constraintTop_toBottomOf="@+id/headerLayout">
@@ -59,7 +59,7 @@
             android:layout_marginEnd="24dp"
             android:text="0.0 km/h"
             android:textColor="#263238"
-            android:textSize="36sp"
+            android:textSize="28sp"
             android:textStyle="bold" />
 
         <LinearLayout
@@ -72,7 +72,7 @@
                 android:layout_height="wrap_content"
                 android:text="高度: 0.0 m"
                 android:textColor="#546E7A"
-                android:textSize="16sp"
+                android:textSize="14sp"
                 android:textStyle="bold" />
             <TextView
                 android:id="@+id/tvDistance"
@@ -80,52 +80,64 @@
                 android:layout_height="wrap_content"
                 android:text="距離: 0.00 km"
                 android:textColor="#546E7A"
-                android:textSize="16sp"
+                android:textSize="14sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
 
+    <org.osmdroid.views.MapView
+        android:id="@+id/mapView"
+        android:layout_width="match_parent"
+        android:layout_height="220dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="8dp"
+        android:background="#E0E0E0"
+        app:layout_constraintTop_toBottomOf="@+id/layoutRealtime" />
+
     <Button
         android:id="@+id/btnStart"
         android:layout_width="0dp"
-        android:layout_height="70dp"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="12dp"
+        android:layout_height="60dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="8dp"
         android:backgroundTint="#4CAF50"
         android:text="START"
         android:textColor="#FFFFFF"
-        android:textSize="20sp"
+        android:textSize="18sp"
         android:textStyle="bold"
         app:layout_constraintEnd_toStartOf="@+id/btnStop"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/layoutRealtime" />
+        app:layout_constraintTop_toBottomOf="@+id/mapView" />
 
     <Button
         android:id="@+id/btnStop"
         android:layout_width="0dp"
-        android:layout_height="70dp"
-        android:layout_marginStart="12dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="24dp"
+        android:layout_height="60dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="16dp"
         android:backgroundTint="#F44336"
         android:text="STOP"
         android:textColor="#FFFFFF"
-        android:textSize="20sp"
+        android:textSize="18sp"
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@+id/btnStart"
-        app:layout_constraintTop_toBottomOf="@+id/layoutRealtime" />
+        app:layout_constraintTop_toBottomOf="@+id/mapView" />
 
     <Button
         android:id="@+id/btnMark"
         android:layout_width="0dp"
-        android:layout_height="60dp"
-        android:layout_margin="24dp"
+        android:layout_height="50dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="12dp"
         android:backgroundTint="#FF9800"
         android:text="📍 スポットを記録"
         android:textColor="#FFFFFF"
-        android:textSize="18sp"
+        android:textSize="16sp"
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -135,20 +147,20 @@
         android:id="@+id/layoutFolders"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="24dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="12dp"
         android:orientation="horizontal"
-        app:layout_constraintTop_toBottomOf="@+id/btnMark"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toBottomOf="@+id/btnMark">
 
         <Button
             android:id="@+id/btnOpenFolder"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="4dp"
             android:backgroundTint="#03A9F4"
-            android:padding="12dp"
+            android:padding="8dp"
             android:text="GPXフォルダ"
             android:textColor="#FFFFFF"
             android:textStyle="bold" />
@@ -158,38 +170,25 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="4dp"
             android:backgroundTint="#607D8B"
-            android:padding="12dp"
+            android:padding="8dp"
             android:text="ログフォルダ"
             android:textColor="#FFFFFF"
             android:textStyle="bold" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/tvLogTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="16dp"
-        android:text="リアルタイムログ (過去20分)"
-        android:textColor="#455A64"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/layoutFolders" />
-
     <ScrollView
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_margin="24dp"
+        android:layout_margin="16dp"
         android:background="#FFFFFF"
         android:elevation="4dp"
-        android:padding="16dp"
+        android:padding="12dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/tvLogTitle">
+        app:layout_constraintTop_toBottomOf="@+id/layoutFolders">
 
         <TextView
             android:id="@+id/tvRecentLocations"

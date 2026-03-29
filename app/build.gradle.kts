@@ -45,4 +45,6 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     implementation("com.google.android.gms:play-services-location:21.2.0")
+    // ★ 追加: 完全無料の地図ライブラリ (osmdroid)
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
 }
