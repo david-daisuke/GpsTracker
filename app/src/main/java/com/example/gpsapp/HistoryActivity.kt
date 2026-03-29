@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
@@ -125,8 +126,8 @@ class HistoryActivity : AppCompatActivity() {
 
     private fun shareFile(file: File) {
         try {
-            // Android 7.0以降は FileProvider を使って安全にURIを生成する
-            val uri = FileProvider.getUriForFile(this, "${applicationContext.packageName}.fileprovider", file)
+            // ★ 修正箇所1: パッケージ名を直接指定して確実にFileProviderを呼び出す
+            val uri = FileProvider.getUriForFile(this, "com.example.gpsapp.fileprovider", file)
 
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "*/*" // どんなアプリでも受け取れるようにする
@@ -134,8 +135,11 @@ class HistoryActivity : AppCompatActivity() {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(Intent.createChooser(shareIntent, "GPXファイルを共有"))
+
         } catch (e: Exception) {
             e.printStackTrace()
+            // ★ 修正箇所2: 共有に失敗した場合は画面下部にエラーメッセージを表示して原因を分かりやすくする
+            Toast.makeText(this, "共有エラー: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 }
