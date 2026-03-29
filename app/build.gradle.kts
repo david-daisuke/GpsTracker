@@ -47,4 +47,6 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.2.0")
     // ★ 追加: 完全無料の地図ライブラリ (osmdroid)
     implementation("org.osmdroid:osmdroid-android:6.1.18")
+    // ★ これを追加します（グラフ用ライブラリ）
+    implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
 }

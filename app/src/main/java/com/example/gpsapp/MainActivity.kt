@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.graphics.Color
 import android.location.Geocoder
 import android.location.Location
 import android.net.Uri
@@ -30,6 +31,11 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.lifecycleScope
+import com.github.mikephil.charting.charts.LineChart
+import com.github.mikephil.charting.components.XAxis
+import com.github.mikephil.charting.data.Entry
+import com.github.mikephil.charting.data.LineData
+import com.github.mikephil.charting.data.LineDataSet
 import com.google.android.gms.location.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -82,28 +88,27 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvAltitude: TextView
     private lateinit var tvDistance: TextView
     private lateinit var mapView: MapView
+    private lateinit var altitudeChart: LineChart // ★ 追加: グラフ
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // OSMdroidの設定 (パッケージ名を設定しないと地図サーバーからブロックされます)
         Configuration.getInstance().userAgentValue = applicationContext.packageName
-
         setContentView(R.layout.activity_main)
 
-        // MapViewの初期設定
         mapView = findViewById(R.id.mapView)
         mapView.setTileSource(TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
         mapView.controller.setZoom(18.0)
-
-        // 日本(東京)周辺を初期位置にする
         mapView.controller.setCenter(GeoPoint(35.6895, 139.6917))
+
+        // ★ グラフの初期設定
+        altitudeChart = findViewById(R.id.altitudeChart)
+        setupChart()
 
         val btnStart = findViewById<Button>(R.id.btnStart)
         val btnStop = findViewById<Button>(R.id.btnStop)
         val btnMark = findViewById<Button>(R.id.btnMark)
-        val btnSettings = findViewById<Button>(R.id.btnSettings) // ★ 追加: 設定ボタン
+        val btnSettings = findViewById<Button>(R.id.btnSettings)
         val btnOpenFolder = findViewById<Button>(R.id.btnOpenFolder)
         val btnOpenLogFolder = findViewById<Button>(R.id.btnOpenLogFolder)
 
@@ -124,28 +129,74 @@ class MainActivity : AppCompatActivity() {
         btnStart.setOnClickListener { startTracking() }
         btnStop.setOnClickListener { stopTracking() }
         btnMark.setOnClickListener { showMarkDialog() }
-
-        // ★ 追加: 設定画面を開く
-        btnSettings.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
-
+        btnSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         btnOpenFolder.setOnClickListener { openFolderInFilesApp("GPX") }
-        btnOpenLogFolder.setOnClickListener {
-            startActivity(Intent(this, HistoryActivity::class.java))
-        }
+        btnOpenLogFolder.setOnClickListener { startActivity(Intent(this, HistoryActivity::class.java)) }
 
-        // 5秒おきに画面を更新
         lifecycleScope.launch {
             while (isActive) {
                 if (GpsDataRepository.isRecording) {
                     updateRealtimeDisplay()
                     updateRecentLocationsDisplay()
-                    updateMapDisplay() // 地図も更新
+                    updateMapDisplay()
+                    updateChartDisplay() // ★ グラフを更新
                 }
                 delay(5000)
             }
         }
+    }
+
+    // ★ グラフの見た目を設定する関数
+    private fun setupChart() {
+        altitudeChart.description.isEnabled = false // 右下の説明文を消す
+        altitudeChart.legend.isEnabled = false // 凡例を消す
+        altitudeChart.setTouchEnabled(true)
+        altitudeChart.isDragEnabled = true
+        altitudeChart.setScaleEnabled(true)
+        altitudeChart.axisRight.isEnabled = false // 右側のY軸メモリを消す
+
+        // X軸（距離）の設定
+        val xAxis = altitudeChart.xAxis
+        xAxis.position = XAxis.XAxisPosition.BOTTOM
+        xAxis.setDrawGridLines(false)
+        xAxis.textColor = Color.DKGRAY
+
+        // Y軸（高度）の設定
+        val yAxis = altitudeChart.axisLeft
+        yAxis.setDrawGridLines(true)
+        yAxis.textColor = Color.DKGRAY
+    }
+
+    // ★ 取得したデータからグラフを描画する関数
+    private fun updateChartDisplay() {
+        if (GpsDataRepository.locationList.isEmpty()) {
+            altitudeChart.clear()
+            return
+        }
+
+        // データをグラフ用の「Entry」に変換 (X軸=距離km, Y軸=高度m)
+        val entries = ArrayList<Entry>()
+        GpsDataRepository.locationList.forEach { loc ->
+            val distKm = (loc.distance / 1000f)
+            entries.add(Entry(distKm, loc.altitude.toFloat()))
+        }
+
+        // 線のデザイン設定
+        val dataSet = LineDataSet(entries, "高度")
+        dataSet.color = Color.parseColor("#4CAF50") // 緑色の線
+        dataSet.setDrawCircles(false) // 点の丸印を消す
+        dataSet.lineWidth = 2.5f
+        dataSet.mode = LineDataSet.Mode.CUBIC_BEZIER // なめらかな曲線にする
+        dataSet.setDrawValues(false) // 各点の数値を非表示
+
+        // グラフの下を塗りつぶす
+        dataSet.setDrawFilled(true)
+        dataSet.fillColor = Color.parseColor("#C8E6C9")
+        dataSet.fillAlpha = 150
+
+        val lineData = LineData(dataSet)
+        altitudeChart.data = lineData
+        altitudeChart.invalidate() // グラフを再描画
     }
 
     override fun onResume() {
@@ -160,18 +211,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateMapDisplay() {
         if (GpsDataRepository.locationList.isEmpty()) return
-
         mapView.overlays.clear()
-
-        // 軌跡 (青い線) を描画
         val polyline = Polyline()
         polyline.color = android.graphics.Color.BLUE
         polyline.width = 10.0f
         val geoPoints = GpsDataRepository.locationList.map { GeoPoint(it.latitude, it.longitude) }
         polyline.setPoints(geoPoints)
         mapView.overlays.add(polyline)
-
-        // スポット (ピン) を描画
         GpsDataRepository.waypointList.forEach { wpt ->
             val marker = Marker(mapView)
             marker.position = GeoPoint(wpt.latitude, wpt.longitude)
@@ -180,11 +226,9 @@ class MainActivity : AppCompatActivity() {
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
             mapView.overlays.add(marker)
         }
-
-        // 最新の現在地にカメラを追従させる
         val lastLoc = GpsDataRepository.locationList.last()
         mapView.controller.animateTo(GeoPoint(lastLoc.latitude, lastLoc.longitude))
-        mapView.invalidate() // 地図を再描画
+        mapView.invalidate()
     }
 
     private fun updateRealtimeDisplay() {
@@ -192,7 +236,6 @@ class MainActivity : AppCompatActivity() {
             val lastLoc = GpsDataRepository.locationList.last()
             val speedKmH = lastLoc.speed * 3.6
             val distKm = lastLoc.distance / 1000.0
-
             tvSpeed.text = String.format(Locale.US, "%.1f km/h", speedKmH)
             tvAltitude.text = String.format(Locale.US, "高度: %.1f m", lastLoc.altitude)
             tvDistance.text = String.format(Locale.US, "距離: %.2f km", distKm)
@@ -208,11 +251,9 @@ class MainActivity : AppCompatActivity() {
         val layout = LinearLayout(this)
         layout.orientation = LinearLayout.VERTICAL
         layout.setPadding(50, 40, 50, 10)
-
         val etName = EditText(this)
         etName.hint = "名称 (例: 絶景ポイント)"
         layout.addView(etName)
-
         val etMemo = EditText(this)
         etMemo.hint = "メモ"
         layout.addView(etMemo)
@@ -250,7 +291,9 @@ class MainActivity : AppCompatActivity() {
         GpsDataRepository.waypointList.clear()
         GpsDataRepository.isRecording = true
         GpsDataRepository.totalDistance = 0.0f
+
         mapView.overlays.clear()
+        altitudeChart.clear() // ★ グラフをリセット
 
         tvStatus.text = "⏺ 記録中"
         tvStatus.setTextColor("#F44336".toColorInt())
@@ -270,7 +313,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopTracking() {
         if (!GpsDataRepository.isRecording) return
-
         val serviceIntent = Intent(this, GpsTrackerService::class.java)
         stopService(serviceIntent)
         GpsDataRepository.isRecording = false
@@ -287,7 +329,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateRecentLocationsDisplay() {
         val twentyMinutesAgo = System.currentTimeMillis() - (20 * 60 * 1000)
-
         val recentLocations = GpsDataRepository.locationList.filter { it.time >= twentyMinutesAgo }.map { loc ->
             val addrStr = if (loc.address.isNotEmpty()) " [${loc.address}]" else ""
             val speedKmH = loc.speed * 3.6
@@ -299,7 +340,6 @@ class MainActivity : AppCompatActivity() {
             val distStr = String.format(Locale.US, "%.2f", distKm)
             Pair(loc.time, "📍 緯度: $latStr, 経度: $lonStr$addrStr\n    速度: $speedStr km/h, 高度: $altStr m, 距離: $distStr km")
         }
-
         val recentWaypoints = GpsDataRepository.waypointList.filter { it.time >= twentyMinutesAgo }.map { wpt ->
             val displayName = if (wpt.name.isNotEmpty()) wpt.name else "名称なし"
             val displayMemo = if (wpt.memo.isNotEmpty()) " - ${wpt.memo}" else ""
@@ -308,16 +348,13 @@ class MainActivity : AppCompatActivity() {
             val lonStr = String.format(Locale.US, "%.4f", wpt.longitude)
             Pair(wpt.time, "⭐ [マーク] $displayName$displayMemo\n    📍 緯度: $latStr, 経度: $lonStr$addrStr")
         }
-
         val combinedList = (recentLocations + recentWaypoints).sortedByDescending { it.first }
         val displayText = java.lang.StringBuilder("【過去20分間の記録: ${combinedList.size}件】\n")
         val sdf = SimpleDateFormat("HH:mm:ss", Locale.US)
-
         combinedList.forEach { item ->
             val timeStr = sdf.format(Date(item.first))
             displayText.append("$timeStr ${item.second}\n\n")
         }
-
         tvRecentLocations.text = if (combinedList.isEmpty()) "過去20分間の記録はまだありません" else displayText.toString().trim()
     }
 
@@ -325,11 +362,9 @@ class MainActivity : AppCompatActivity() {
         val dateDirName = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
         val path = "GpsTrackerLogs%2F$subFolderName%2F$dateDirName"
         val uri = Uri.parse("content://com.android.externalstorage.documents/document/primary:Download%2F$path")
-
         val intent = Intent(Intent.ACTION_VIEW)
         intent.setDataAndType(uri, "vnd.android.document/directory")
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-
         try {
             startActivity(intent)
         } catch (e: Exception) {
@@ -347,29 +382,23 @@ class MainActivity : AppCompatActivity() {
             val twentyMinutesAgo = System.currentTimeMillis() - (20 * 60 * 1000)
             val recentWaypoints = GpsDataRepository.waypointList.filter { it.time >= twentyMinutesAgo }
             val recentLocations = GpsDataRepository.locationList.filter { it.time >= twentyMinutesAgo }
-
             if (recentLocations.isEmpty() && recentWaypoints.isEmpty()) {
                 Toast.makeText(this, "直近20分間の記録データがありません", Toast.LENGTH_SHORT).show()
                 return
             }
-
             val sdfUtc = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
             val fileNameTime = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
             val dateDirName = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-
             val gpxFileName = "Track_${fileNameTime}.gpx"
             val txtFileName = "Log_${fileNameTime}.txt"
-
             val minTime = (recentLocations.map { it.time } + recentWaypoints.map { it.time }).minOrNull() ?: System.currentTimeMillis()
             val maxTime = (recentLocations.map { it.time } + recentWaypoints.map { it.time }).maxOrNull() ?: System.currentTimeMillis()
             val timeFormatForLog = SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
-
             val logBuilder = StringBuilder()
             logBuilder.append("【GPSトラッカー 記録ログ】\n")
             logBuilder.append("保存対象期間: ${timeFormatForLog.format(Date(minTime))} 〜 ${timeFormatForLog.format(Date(maxTime))}\n")
             logBuilder.append("関連GPXファイル名: $gpxFileName\n")
             logBuilder.append("-----------------------------------------\n")
-
             val logLocations = recentLocations.map { loc ->
                 val speedKmH = loc.speed * 3.6
                 val distKm = loc.distance / 1000.0
@@ -379,17 +408,14 @@ class MainActivity : AppCompatActivity() {
                 val memoText = if (wpt.memo.isNotEmpty()) " - ${wpt.memo}" else ""
                 Pair(wpt.time, "⭐ [マーク] ${wpt.name}$memoText\n    📍 緯度: ${wpt.latitude}, 経度: ${wpt.longitude}")
             }
-
             val combinedLogList = (logLocations + logWaypoints).sortedBy { it.first }
             val sdfTimeOnly = SimpleDateFormat("HH:mm:ss", Locale.US)
             combinedLogList.forEach { item ->
                 logBuilder.append("[${sdfTimeOnly.format(Date(item.first))}] ${item.second}\n\n")
             }
-
             val gpxBuilder = java.lang.StringBuilder()
             gpxBuilder.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             gpxBuilder.append("<gpx version=\"1.1\" creator=\"MyTracker\">\n")
-
             for (wpt in recentWaypoints) {
                 val timeString = sdfUtc.format(Date(wpt.time))
                 val safeName = wpt.name.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
@@ -401,7 +427,6 @@ class MainActivity : AppCompatActivity() {
                 if (safeMemo.isNotEmpty()) gpxBuilder.append("    <desc>${safeMemo}</desc>\n")
                 gpxBuilder.append("  </wpt>\n")
             }
-
             gpxBuilder.append("  <trk>\n    <trkseg>\n")
             for (loc in recentLocations) {
                 val timeString = sdfUtc.format(Date(loc.time))
@@ -411,18 +436,14 @@ class MainActivity : AppCompatActivity() {
                 gpxBuilder.append("      </trkpt>\n")
             }
             gpxBuilder.append("    </trkseg>\n  </trk>\n</gpx>")
-
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             val gpxDir = File(downloadsDir, "GpsTrackerLogs/GPX/$dateDirName")
             if (!gpxDir.exists()) gpxDir.mkdirs()
             FileOutputStream(File(gpxDir, gpxFileName)).use { it.write(gpxBuilder.toString().toByteArray()) }
-
             val logDir = File(downloadsDir, "GpsTrackerLogs/LOGS/$dateDirName")
             if (!logDir.exists()) logDir.mkdirs()
             FileOutputStream(File(logDir, txtFileName)).use { it.write(logBuilder.toString().toByteArray()) }
-
             Toast.makeText(this, "GPXとテキストログを保存しました！", Toast.LENGTH_LONG).show()
-
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "保存に失敗しました", Toast.LENGTH_SHORT).show()
@@ -439,7 +460,6 @@ class GpsTrackerService : Service() {
     override fun onCreate() {
         super.onCreate()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 for (location in locationResult.locations) {
@@ -451,7 +471,6 @@ class GpsTrackerService : Service() {
                         }
                         GpsDataRepository.totalDistance += prevLocation.distanceTo(location)
                     }
-
                     val trackLoc = TrackLocation(
                         location.latitude,
                         location.longitude,
@@ -461,13 +480,11 @@ class GpsTrackerService : Service() {
                         GpsDataRepository.totalDistance
                     )
                     GpsDataRepository.locationList.add(trackLoc)
-
                     CoroutineScope(Dispatchers.IO).launch {
                         try {
                             val geocoder = Geocoder(applicationContext, Locale.getDefault())
                             @Suppress("DEPRECATION")
                             val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
-
                             if (!addresses.isNullOrEmpty()) {
                                 val addr = addresses[0]
                                 trackLoc.address = listOfNotNull(addr.adminArea, addr.locality, addr.subLocality).joinToString("")
@@ -488,7 +505,6 @@ class GpsTrackerService : Service() {
             .setContentText("位置情報を記録中です...")
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .build()
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         } else {
@@ -500,15 +516,12 @@ class GpsTrackerService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun requestLocationUpdates() {
-        // ★ 変更: SharedPreferencesからユーザー設定（間隔と精度）を読み込んで適用する
         val prefs = getSharedPreferences("GpsSettings", Context.MODE_PRIVATE)
-        val intervalMs = prefs.getLong("INTERVAL", 5000L) // デフォルト5秒
+        val intervalMs = prefs.getLong("INTERVAL", 5000L)
         val accuracy = prefs.getInt("ACCURACY", Priority.PRIORITY_HIGH_ACCURACY)
-
         val locationRequest = LocationRequest.Builder(accuracy, intervalMs)
             .setMinUpdateIntervalMillis(intervalMs)
             .build()
-
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
     }
 
