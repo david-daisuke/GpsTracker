@@ -12,7 +12,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.Color
-import android.location.Geocoder
 import android.location.Location
 import android.net.Uri
 import android.os.Build
@@ -44,8 +43,9 @@ import com.github.mikephil.charting.formatter.ValueFormatter
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
+import com.github.mikephil.charting.highlight.Highlight
+import com.github.mikephil.charting.listener.OnChartValueSelectedListener
 import com.google.android.gms.location.*
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -57,6 +57,8 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.tileprovider.cachemanager.CacheManager
 import org.osmdroid.tileprovider.tilesource.XYTileSource
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -103,6 +105,7 @@ class MainActivity : AppCompatActivity() {
     private var currentPhotoUri: Uri? = null
     private var dialogImageView: ImageView? = null
     private lateinit var takePictureLauncher: ActivityResultLauncher<Uri>
+    private lateinit var gpxPickerLauncher: ActivityResultLauncher<String> // GPX読込用
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -144,6 +147,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // ==========================================
+        // ★ GPX読み込み用のファイルピッカー
+        // ==========================================
+        gpxPickerLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+            if (uri != null) {
+                loadGpxFile(uri)
+            }
+        }
+
         mapView = findViewById(R.id.mapView)
         mapView.setMultiTouchControls(true)
         mapView.controller.setZoom(18.0)
@@ -162,6 +174,15 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnOpenFolder).setOnClickListener { openFolderInFilesApp("GPX") }
         findViewById<Button>(R.id.btnOpenLogFolder).setOnClickListener { startActivity(Intent(this, HistoryActivity::class.java)) }
         findViewById<Button>(R.id.btnDownloadMap).setOnClickListener { downloadOfflineMap() }
+
+        // ★ GPX読み込みボタンの動作
+        findViewById<Button>(R.id.btnLoadGpx).setOnClickListener {
+            if (GpsDataRepository.isRecording) {
+                Toast.makeText(this, "記録中は読み込めません。STOPを押してください。", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            gpxPickerLauncher.launch("*/*") // すべてのファイルから選択
+        }
 
         tvRecentLocations = findViewById(R.id.tvRecentLocations)
         tvStatus = findViewById(R.id.tvStatus)
@@ -213,6 +234,48 @@ class MainActivity : AppCompatActivity() {
         altitudeChart.xAxis.textColor = Color.DKGRAY
         altitudeChart.axisLeft.setDrawGridLines(true)
         altitudeChart.axisLeft.textColor = Color.DKGRAY
+        altitudeChart.isHighlightPerTapEnabled = true // タップによる強調表示を有効化
+
+        // ==========================================
+        // ★ グラフタップ時に地図と連動する機能
+        // ==========================================
+        altitudeChart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
+            override fun onValueSelected(e: Entry?, h: Highlight?) {
+                if (e == null || GpsDataRepository.locationList.isEmpty()) return
+
+                val startTime = GpsDataRepository.locationList.first().time
+                val targetTime = startTime + e.x.toLong() // x軸(差分時間)から実際の時刻を逆算
+
+                // タップした時間に最も近いGPS座標を探す
+                val closestLoc = GpsDataRepository.locationList.minByOrNull { Math.abs(it.time - targetTime) }
+
+                if (closestLoc != null) {
+                    val geoPoint = GeoPoint(closestLoc.latitude, closestLoc.longitude)
+
+                    // 古い強調マーカーを消す
+                    mapView.overlays.removeAll { it is Marker && it.id == "HIGHLIGHT_MARKER" }
+
+                    // 新しい強調マーカー（ピン）を置く
+                    val marker = Marker(mapView)
+                    marker.id = "HIGHLIGHT_MARKER"
+                    marker.position = geoPoint
+                    marker.title = "選択地点: 高度 ${String.format(Locale.US, "%.1f", closestLoc.altitude)}m"
+                    marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    mapView.overlays.add(marker)
+
+                    // 地図をその場所に飛ばして情報ウィンドウを開く
+                    mapView.controller.animateTo(geoPoint)
+                    marker.showInfoWindow()
+                    mapView.invalidate()
+                }
+            }
+
+            override fun onNothingSelected() {
+                // 選択解除時に強調マーカーを消す
+                mapView.overlays.removeAll { it is Marker && it.id == "HIGHLIGHT_MARKER" }
+                mapView.invalidate()
+            }
+        })
     }
 
     private fun updateChartDisplay() {
@@ -245,9 +308,89 @@ class MainActivity : AppCompatActivity() {
             setDrawFilled(true)
             fillColor = Color.parseColor("#C8E6C9")
             fillAlpha = 150
+            highLightColor = Color.RED // タップ時の強調線の色
+            highlightLineWidth = 2f
         }
         altitudeChart.data = LineData(dataSet)
         altitudeChart.invalidate()
+    }
+
+    // ==========================================
+    // ★ GPXファイルのパース（読み込み）機能
+    // ==========================================
+    private fun loadGpxFile(uri: Uri) {
+        GpsDataRepository.locationList.clear()
+        GpsDataRepository.waypointList.clear()
+        GpsDataRepository.eventList.clear()
+        GpsDataRepository.totalDistance = 0.0f
+
+        try {
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                val factory = XmlPullParserFactory.newInstance()
+                val parser = factory.newPullParser()
+                parser.setInput(inputStream, null)
+
+                var eventType = parser.eventType
+                var currentLat = 0.0
+                var currentLon = 0.0
+                var currentEle = 0.0
+                var currentTime = 0L
+                val sdfUtc = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+
+                while (eventType != XmlPullParser.END_DOCUMENT) {
+                    val tagName = parser.name
+                    when (eventType) {
+                        XmlPullParser.START_TAG -> {
+                            if (tagName == "trkpt" || tagName == "wpt") {
+                                currentLat = parser.getAttributeValue(null, "lat")?.toDoubleOrNull() ?: 0.0
+                                currentLon = parser.getAttributeValue(null, "lon")?.toDoubleOrNull() ?: 0.0
+                            } else if (tagName == "ele") {
+                                currentEle = parser.nextText().toDoubleOrNull() ?: 0.0
+                            } else if (tagName == "time") {
+                                val timeStr = parser.nextText()
+                                try { currentTime = sdfUtc.parse(timeStr)?.time ?: 0L } catch (e: Exception) {}
+                            }
+                        }
+                        XmlPullParser.END_TAG -> {
+                            if (tagName == "trkpt") {
+                                val dist = if(GpsDataRepository.locationList.isEmpty()) 0f else {
+                                    val last = GpsDataRepository.locationList.last()
+                                    val res = FloatArray(1)
+                                    Location.distanceBetween(last.latitude, last.longitude, currentLat, currentLon, res)
+                                    last.distance + res[0]
+                                }
+                                GpsDataRepository.locationList.add(TrackLocation(currentLat, currentLon, currentEle, 0f, currentTime, dist))
+                                GpsDataRepository.totalDistance = dist
+                            } else if (tagName == "wpt") {
+                                GpsDataRepository.waypointList.add(WaypointData(currentLat, currentLon, currentEle, currentTime, "GPXインポート地点", "", ""))
+                            }
+                        }
+                    }
+                    eventType = parser.next()
+                }
+            }
+
+            if (GpsDataRepository.locationList.isNotEmpty()) {
+                Toast.makeText(this, "GPXを読み込みました！", Toast.LENGTH_SHORT).show()
+                GpsDataRepository.eventList.add(AppEvent(System.currentTimeMillis(), "📥 GPXファイルをインポートしました"))
+                updateMapDisplay()
+                updateChartDisplay()
+                updateRecentLocationsDisplay()
+                updateRealtimeDisplay()
+
+                // 読み込んだルートの先頭に地図を移動
+                val firstLoc = GpsDataRepository.locationList.first()
+                mapView.controller.animateTo(GeoPoint(firstLoc.latitude, firstLoc.longitude))
+                mapView.controller.setZoom(14.0)
+            } else {
+                Toast.makeText(this, "GPXからデータを取り出せませんでした", Toast.LENGTH_SHORT).show()
+            }
+
+        } catch (e: Exception) {
+            val stackTrace = Log.getStackTraceString(e)
+            DebugLogger.log(this, "GPX_LOAD", stackTrace)
+            Toast.makeText(this, "GPXの読み込みに失敗しました", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onResume() { super.onResume(); mapView.onResume() }
@@ -255,7 +398,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateMapDisplay() {
         if (GpsDataRepository.locationList.isEmpty()) return
-        mapView.overlays.clear()
+
+        // 選択地点マーカー（HIGHLIGHT_MARKER）以外を消去
+        mapView.overlays.removeAll { it !is Marker || it.id != "HIGHLIGHT_MARKER" }
+
         val polyline = Polyline().apply {
             color = android.graphics.Color.BLUE
             width = 10.0f
@@ -271,8 +417,12 @@ class MainActivity : AppCompatActivity() {
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
             mapView.overlays.add(marker)
         }
-        val lastLoc = GpsDataRepository.locationList.last()
-        mapView.controller.animateTo(GeoPoint(lastLoc.latitude, lastLoc.longitude))
+
+        // 記録中のみ現在地へ追従する
+        if (GpsDataRepository.isRecording) {
+            val lastLoc = GpsDataRepository.locationList.last()
+            mapView.controller.animateTo(GeoPoint(lastLoc.latitude, lastLoc.longitude))
+        }
         mapView.invalidate()
     }
 
