@@ -48,4 +48,6 @@ dependencies {
     implementation("org.osmdroid:osmdroid-android:6.1.18")
     // ★ グラフ用ライブラリ
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+    // ★ クラウド(Google Drive等)のフォルダ操作用ライブラリ
+    implementation("androidx.documentfile:documentfile:1.0.1")
 }
