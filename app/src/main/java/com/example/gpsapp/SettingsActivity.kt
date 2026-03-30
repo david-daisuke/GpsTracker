@@ -1,5 +1,6 @@
 package com.example.gpsapp
 
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -17,19 +18,16 @@ import com.google.android.gms.location.Priority
 
 class SettingsActivity : AppCompatActivity() {
 
-    private lateinit var tvSyncFolder: TextView
+    private lateinit var tvLocalFolder: TextView
     private var selectedFolderUri: String? = null
 
-    // ★ Android標準のフォルダ選択ピッカーを呼び出す準備
     private val folderPickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
         if (uri != null) {
-            // OS再起動後もこのフォルダに書き込めるように「永続的な権限」を取得
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             selectedFolderUri = uri.toString()
-
-            // 選択されたフォルダの名前を表示
             val docFile = DocumentFile.fromTreeUri(this, uri)
-            tvSyncFolder.text = "現在の保存先: ${docFile?.name ?: "不明なフォルダ"}"
+            tvLocalFolder.text = "現在の保存先: ${docFile?.name ?: "不明なフォルダ"}"
+            Toast.makeText(this, "保存先フォルダを設定しました", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -41,17 +39,16 @@ class SettingsActivity : AppCompatActivity() {
         val currentInterval = prefs.getLong("INTERVAL", 5000L)
         val currentAccuracy = prefs.getInt("ACCURACY", Priority.PRIORITY_HIGH_ACCURACY)
         val currentDebug = prefs.getBoolean("DEBUG_MODE", false)
-
-        // クラウド同期の現在の設定を読み込む
-        val currentAutoSync = prefs.getBoolean("AUTO_SYNC", false)
-        selectedFolderUri = prefs.getString("SYNC_FOLDER_URI", null)
+        val useCustomFolder = prefs.getBoolean("USE_CUSTOM_FOLDER", false)
+        selectedFolderUri = prefs.getString("CUSTOM_FOLDER_URI", null)
 
         val rgInterval = findViewById<RadioGroup>(R.id.rgInterval)
         val rgAccuracy = findViewById<RadioGroup>(R.id.rgAccuracy)
         val switchDebug = findViewById<Switch>(R.id.switchDebug)
-        val switchAutoSync = findViewById<Switch>(R.id.switchAutoSync)
-        val btnSelectSyncFolder = findViewById<Button>(R.id.btnSelectSyncFolder)
-        tvSyncFolder = findViewById(R.id.tvSyncFolder)
+        val switchCustomFolder = findViewById<Switch>(R.id.switchCustomFolder)
+        val btnSelectLocalFolder = findViewById<Button>(R.id.btnSelectLocalFolder)
+        val btnPrivacyPolicy = findViewById<Button>(R.id.btnPrivacyPolicy)
+        tvLocalFolder = findViewById(R.id.tvLocalFolder)
 
         when (currentInterval) {
             1000L -> rgInterval.check(R.id.rbInterval1s)
@@ -65,24 +62,31 @@ class SettingsActivity : AppCompatActivity() {
             Priority.PRIORITY_BALANCED_POWER_ACCURACY -> rgAccuracy.check(R.id.rbAccBalanced)
             else -> rgAccuracy.check(R.id.rbAccHigh)
         }
-
         switchDebug.isChecked = currentDebug
-        switchAutoSync.isChecked = currentAutoSync
+        switchCustomFolder.isChecked = useCustomFolder
 
-        // 既にフォルダが設定されていれば名前を表示
         if (selectedFolderUri != null) {
             try {
                 val uri = Uri.parse(selectedFolderUri)
                 val docFile = DocumentFile.fromTreeUri(this, uri)
-                tvSyncFolder.text = "現在の保存先: ${docFile?.name ?: "設定済み"}"
+                tvLocalFolder.text = "現在の保存先: ${docFile?.name ?: "設定済み"}"
             } catch (e: Exception) {
-                tvSyncFolder.text = "現在の保存先: 読み込みエラー"
+                tvLocalFolder.text = "現在の保存先: 読み込みエラー"
             }
         }
 
-        // フォルダ選択ボタンが押されたらピッカーを起動
-        btnSelectSyncFolder.setOnClickListener {
-            folderPickerLauncher.launch(null)
+        btnSelectLocalFolder.setOnClickListener { folderPickerLauncher.launch(null) }
+
+        // ★ プライバシーポリシーの表示
+        btnPrivacyPolicy.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("プライバシーポリシー")
+                .setMessage("本アプリは、ユーザーの移動ルートを記録・表示する目的で、バックグラウンドを含む位置情報を収集します。\n\n" +
+                        "1. 収集するデータ\n位置情報（緯度・経度・高度）、移動速度\n\n" +
+                        "2. データの利用目的\n・地図上へのルート表示\n・GPXファイルとしてのエクスポート\n\n" +
+                        "3. データの保存と共有\n収集した位置情報は、ユーザーの端末内、またはユーザーが明示的に指定したローカルフォルダにのみ保存されます。アプリ開発者や第三者のサーバーに自動送信されることはありません。")
+                .setPositiveButton("確認しました", null)
+                .show()
         }
 
         findViewById<Button>(R.id.btnSaveSettings).setOnClickListener {
@@ -93,9 +97,8 @@ class SettingsActivity : AppCompatActivity() {
                 R.id.rbAccHigh -> Priority.PRIORITY_HIGH_ACCURACY; R.id.rbAccBalanced -> Priority.PRIORITY_BALANCED_POWER_ACCURACY; else -> Priority.PRIORITY_HIGH_ACCURACY
             }
 
-            // 同期をONにしたのにフォルダが選ばれていない場合は警告
-            if (switchAutoSync.isChecked && selectedFolderUri == null) {
-                Toast.makeText(this, "クラウド同期をONにする場合は、保存先フォルダを選択してください", Toast.LENGTH_LONG).show()
+            if (switchCustomFolder.isChecked && selectedFolderUri == null) {
+                Toast.makeText(this, "変更をONにする場合は、保存先フォルダを選択してください", Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
 
@@ -103,8 +106,8 @@ class SettingsActivity : AppCompatActivity() {
                 putLong("INTERVAL", interval)
                 putInt("ACCURACY", accuracy)
                 putBoolean("DEBUG_MODE", switchDebug.isChecked)
-                putBoolean("AUTO_SYNC", switchAutoSync.isChecked)
-                putString("SYNC_FOLDER_URI", selectedFolderUri)
+                putBoolean("USE_CUSTOM_FOLDER", switchCustomFolder.isChecked)
+                putString("CUSTOM_FOLDER_URI", selectedFolderUri)
                 apply()
             }
             Toast.makeText(this, "設定を保存しました", Toast.LENGTH_SHORT).show()

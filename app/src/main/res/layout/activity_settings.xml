@@ -17,128 +17,42 @@
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="match_parent"
         android:padding="16dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingBottom="40dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="位置情報の取得間隔"
-                android:textColor="#37474F"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <RadioGroup
-                android:id="@+id/rgInterval"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="#FFFFFF"
-                android:padding="8dp"
-                android:elevation="2dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="位置情報の取得間隔" android:textColor="#37474F" android:textSize="16sp" android:textStyle="bold" />
+            <RadioGroup android:id="@+id/rgInterval" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#FFFFFF" android:padding="8dp" android:elevation="2dp">
                 <RadioButton android:id="@+id/rbInterval1s" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="1秒ごと (高精度)" />
                 <RadioButton android:id="@+id/rbInterval5s" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="5秒ごと (標準)" />
                 <RadioButton android:id="@+id/rbInterval10s" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="10秒ごと (徒歩向け)" />
                 <RadioButton android:id="@+id/rbInterval30s" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="30秒ごと (省エネ)" />
             </RadioGroup>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="GPSの精度"
-                android:textColor="#37474F"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:layout_marginTop="24dp" />
-
-            <RadioGroup
-                android:id="@+id/rgAccuracy"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="#FFFFFF"
-                android:padding="8dp"
-                android:elevation="2dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="GPSの精度" android:textColor="#37474F" android:textSize="16sp" android:textStyle="bold" android:layout_marginTop="24dp" />
+            <RadioGroup android:id="@+id/rgAccuracy" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#FFFFFF" android:padding="8dp" android:elevation="2dp">
                 <RadioButton android:id="@+id/rbAccHigh" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="最高精度 (GPSをフル活用)" />
                 <RadioButton android:id="@+id/rbAccBalanced" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="バランス (基地局等も併用)" />
             </RadioGroup>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="クラウド自動同期 (Google Drive等)"
-                android:textColor="#37474F"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:layout_marginTop="24dp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="#FFFFFF"
-                android:elevation="2dp"
-                android:orientation="vertical"
-                android:padding="12dp">
-
-                <Switch
-                    android:id="@+id/switchAutoSync"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="トラッキング終了時に自動保存"
-                    android:textColor="#37474F" />
-
-                <Button
-                    android:id="@+id/btnSelectSyncFolder"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:backgroundTint="#03A9F4"
-                    android:text="保存先フォルダを選択 (Drive等)" />
-
-                <TextView
-                    android:id="@+id/tvSyncFolder"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="現在の保存先: 未設定"
-                    android:textColor="#757575"
-                    android:textSize="12sp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="保存先フォルダの変更" android:textColor="#37474F" android:textSize="16sp" android:textStyle="bold" android:layout_marginTop="24dp" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#FFFFFF" android:elevation="2dp" android:orientation="vertical" android:padding="12dp">
+                <Switch android:id="@+id/switchCustomFolder" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="デフォルト(Downloads)以外の場所に保存する" android:textColor="#37474F" />
+                <Button android:id="@+id/btnSelectLocalFolder" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:backgroundTint="#03A9F4" android:text="保存先ローカルフォルダを選択" />
+                <TextView android:id="@+id/tvLocalFolder" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="現在の保存先: デフォルト" android:textColor="#757575" android:textSize="12sp" />
             </LinearLayout>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="開発者向けオプション"
-                android:textColor="#37474F"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:layout_marginTop="24dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="アプリ情報" android:textColor="#37474F" android:textSize="16sp" android:textStyle="bold" android:layout_marginTop="24dp" />
+            <Switch android:id="@+id/switchDebug" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#FFFFFF" android:elevation="2dp" android:padding="12dp" android:text="詳細デバッグログをファイルに保存" android:textColor="#37474F" />
 
-            <Switch
-                android:id="@+id/switchDebug"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="#FFFFFF"
-                android:elevation="2dp"
-                android:padding="12dp"
-                android:text="詳細デバッグログをファイルに保存"
-                android:textColor="#37474F" />
+            <Button android:id="@+id/btnPrivacyPolicy" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:backgroundTint="#607D8B" android:text="プライバシーポリシーの確認" android:textColor="#FFFFFF" />
 
+            <Button android:id="@+id/btnSaveSettings" android:layout_width="match_parent" android:layout_height="60dp" android:layout_marginTop="32dp" android:backgroundTint="#4CAF50" android:text="設定を保存" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold" />
         </LinearLayout>
     </ScrollView>
-
-    <Button
-        android:id="@+id/btnSaveSettings"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:layout_margin="16dp"
-        android:backgroundTint="#4CAF50"
-        android:text="設定を保存"
-        android:textColor="#FFFFFF"
-        android:textSize="18sp"
-        android:textStyle="bold" />
 </LinearLayout>
